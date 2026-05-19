@@ -254,46 +254,71 @@ app.get('/api/dashboard', async (req, res) => {
         // ==========================================
             // 📦 ระบบดึงรายการเบิกค้างคืน (Active Borrows)
             // ==========================================
+            // ==========================================
+            // 📦 ระบบดึงรายการเบิกค้างคืน (รวมยอดคนเดียวกัน)
+            // ==========================================
             const sheetTakeout = doc.sheetsByTitle['Log_Takeout'];
-            let activeBorrows = [];
+            let activeBorrowsMap = {};
 
             if (sheetTakeout) {
                 const rows = await sheetTakeout.getRows();
-                activeBorrows = rows
-                    .filter(row => {
-                        // เช็คคอลัมน์ F (ดัชนี 5) ว่าว่างเปล่า หรือมีคำว่า "ยังไม่คืน" หรือ "ค้าง"
-                        const status = (row._rawData[5] || '').toString().trim();
-                        return status === '' || status.includes('ยัง') || status.includes('ค้าง');
-                    })
-                    .map(row => {
-                        // อ้างอิงตามคอลัมน์: B(1)=วันที่, C(2)=สาย, D(3)=ชื่อ, E(4)=รายการของ
+                rows.forEach(row => {
+                    const status = (row._rawData[5] || '').toString().trim();
+                    
+                    // ถ้ายังไม่คืน หรือค้าง
+                    if (status === '' || status.includes('ยัง') || status.includes('ค้าง')) {
                         const date = row._rawData[1] || 'ไม่ระบุวัน';
                         const line = row._rawData[2] || '-';
                         const name = row._rawData[3] || 'ไม่ระบุชื่อ';
                         const itemsStr = row._rawData[4] || '';
 
-                        // หั่นข้อความ "Syringe|10|อัน, Needle|5|เล่ม" ออกมาเป็นชิ้นๆ
-                        const itemsList = itemsStr.split(',').map(itemStr => {
+                        // ถ้ายังไม่มีชื่อคนนี้ในระบบ ให้สร้างกล่องเก็บข้อมูลใหม่
+                        if (!activeBorrowsMap[name]) {
+                            activeBorrowsMap[name] = { name: name, date: date, line: line, totalQty: 0, items: {} };
+                        }
+
+                        // หั่นข้อความ "Syringe|10|อัน" แล้วเอามารวมยอดกัน
+                        itemsStr.split(',').forEach(itemStr => {
                             const parts = itemStr.split('|');
-                            return {
-                                name: parts[0] ? parts[0].trim() : 'อุปกรณ์',
-                                qty: parseInt(parts[1]) || 0,
-                                unit: parts[2] ? parts[2].trim() : 'ชิ้น'
-                            };
-                        }).filter(i => i.qty > 0);
+                            if (parts.length >= 2) {
+                                const itemName = parts[0].trim();
+                                const qty = parseInt(parts[1]) || 0;
+                                const unit = parts[2] ? parts[2].trim() : 'ชิ้น';
 
-                        return { name, date, line, items: itemsList };
-                    });
+                                if (itemName && qty > 0) {
+                                    // ถ้ามีอุปกรณ์นี้อยู่แล้วให้บวกเพิ่ม ถ้าไม่มีให้ตั้งต้นใหม่
+                                    if (activeBorrowsMap[name].items[itemName]) {
+                                        activeBorrowsMap[name].items[itemName].qty += qty;
+                                    } else {
+                                        activeBorrowsMap[name].items[itemName] = { name: itemName, qty: qty, unit: unit };
+                                    }
+                                    activeBorrowsMap[name].totalQty += qty;
+                                }
+                            }
+                        });
+                    }
+                });
             }
-            // ==========================================
-        // 🌟 บรรทัดที่เติมเพิ่ม: ยัดข้อมูลใบเสร็จค้างคืนเข้าไปในตัวแปร stats เดิม
-            stats.activeBorrows = activeBorrows;
 
+            // แปลงข้อมูลจากกล่อง (Object) ให้กลายเป็น Array เพื่อส่งให้หน้าเว็บ
+            const activeBorrows = Object.values(activeBorrowsMap).map(person => ({
+                name: person.name,
+                date: person.date,
+                line: person.line,
+                totalQty: person.totalQty,
+                items: Object.values(person.items) // แปลงรายการย่อยเป็น Array
+            })).filter(p => p.items.length > 0);
+
+            // ยัดใส่ stats ตัวเดิม
+            stats.activeBorrows = activeBorrows;
             res.json(stats);
-    } catch (err) {
-        res.status(500).json({ error: "Dashboard Load Failed" });
-    }
-});
+
+            } catch (error) {
+            console.error("Error loading dashboard:", error);
+            res.status(500).json({ error: "เกิดข้อผิดพลาด" });
+        }
+    });
+            // ==========================================
 
 // ============================================================================
 // 📝 MODULE 5: LIFF DATABASE SUBMISSION & LINE NOTIFICATION ENDPOINTS

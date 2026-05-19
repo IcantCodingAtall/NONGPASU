@@ -397,45 +397,39 @@
             } catch (e) { console.error("ระบบตรวจจับผู้ใช้งานขัดข้อง:", e.message); }
         }
 
+       // ตัวแปรเก็บข้อมูลใบเสร็จไว้โชว์ตอนกด
+        let globalBorrowData = []; 
+
         async function fetchDashboardStats() {
             try {
                 const res = await fetch('/api/dashboard'); 
                 const data = await res.json();
                 
-                // 1. อัปเดตตัวเลขสัตว์
+                // อัปเดตสถิติต่างๆ (ของเดิม)
                 const cows = parseInt(data.animals['วัว']||0); const buffs = parseInt(data.animals['ควาย']||0); const goats = parseInt(data.animals['แพะ']||0); const sheeps = parseInt(data.animals['แกะ']||0); const totalHead = cows + buffs + goats + sheeps;
                 document.getElementById('dash-total-animals').innerText = totalHead; document.getElementById('dash-cow-count').innerText = `${cows} ตัว`; document.getElementById('dash-buff-count').innerText = `${buffs} ตัว`; document.getElementById('dash-goat-count').innerText = `${goats} ตัว`; document.getElementById('dash-sheep-count').innerText = `${sheeps} ตัว`;
                 if (totalHead > 0) { const p1 = (cows / totalHead) * 100; const p2 = p1 + ((buffs / totalHead) * 100); const p3 = p2 + ((goats / totalHead) * 100); document.querySelector('.donut-chart').style.background = `conic-gradient(#00246B 0% ${p1}%, #F8B500 ${p1}% ${p2}%, #10B981 ${p2}% ${p3}%, #64748B ${p3}% 100%)`; }
                 
-                // 2. อัปเดตหัตถการ
                 document.getElementById('stat-blood').innerText = data.procedures['Blood'] || 0; document.getElementById('stat-feces').innerText = data.procedures['Feces'] || 0; document.getElementById('stat-fmd').innerText = data.procedures['FMD'] || 0; document.getElementById('stat-lsd').innerText = data.procedures['LSD'] || 0; document.getElementById('stat-iver').innerText = data.procedures['Ivermectin'] || 0; document.getElementById('stat-alben').innerText = data.procedures['Albendazole'] || 0; document.getElementById('stat-vitamin').innerText = data.procedures['Vitamin'] || 0;
                 
-                // 3. อัปเดตผลแล็บ
                 const tbody = document.getElementById('dash-lab-table');
                 if (data.abnormalLabs && data.abnormalLabs.length > 0) { tbody.innerHTML = data.abnormalLabs.map(row => `<tr class="hover:bg-slate-50 border-b border-slate-100"><td class="p-3 font-bold text-blue-900">${row.animal}<br><span class="text-[10px] bg-slate-100 text-slate-500 px-1 py-0.2 rounded font-normal">${row.species}</span></td><td class="p-3 text-slate-600 font-medium">${row.farm}</td><td class="p-3 text-[11px] font-semibold text-slate-900 leading-tight">${row.issues}</td></tr>`).join(''); } 
                 else { tbody.innerHTML = `<tr><td colspan="3" class="p-4 text-center text-slate-400 italic">🎉 คลีนิกไร้ประวัติเคสแล็บผิดปกติในช่วงนี้ครับ</td></tr>`; }
 
-                // ==========================================
-                // 🌟 4. วาดใบเสร็จรายการเบิกค้างคืน (ฟีเจอร์ใหม่)
-                // ==========================================
+                // 🌟 วาดปุ่มกดเพื่อดูใบเสร็จค้างเบิก
                 const borrowContainer = document.getElementById('dash-borrow-status');
-                
-                // (จำลองข้อมูลชั่วคราว รอต่อ API ของจริง)
-                const mockActiveBorrows = data.activeBorrows || [];
+                globalBorrowData = data.activeBorrows || [];
 
-                if (mockActiveBorrows.length > 0) {
-                    borrowContainer.innerHTML = mockActiveBorrows.map(record => `
-                        <div class="bg-white border border-slate-200 rounded-xl p-3 shadow-sm relative">
-                            <div class="absolute -top-2.5 right-3 bg-red-100 border border-red-200 text-red-700 px-2 py-0.5 rounded-full text-[9px] font-bold shadow-sm animate-pulse">🔴 ยังไม่คืน</div>
-                            <div class="flex justify-between items-start mb-2 border-b border-slate-100 pb-2 mt-1">
-                                <div>
-                                    <div class="text-xs font-bold text-blue-900"><i class="fa-solid fa-user-doctor text-slate-400 mr-1"></i> ${record.name}</div>
-                                    <div class="text-[10px] text-slate-500 mt-0.5 font-semibold">📅 ${record.date} | 🚐 ${record.line}</div>
-                                </div>
+                if (globalBorrowData.length > 0) {
+                    borrowContainer.innerHTML = globalBorrowData.map((record, index) => `
+                        <div onclick="openReceipt(${index})" class="flex justify-between items-center bg-white border border-slate-200 rounded-xl p-3 shadow-sm mb-2 cursor-pointer active:scale-95 transition-transform">
+                            <div>
+                                <div class="text-xs font-bold text-blue-900"><i class="fa-solid fa-user-doctor text-slate-400 mr-1"></i> ${record.name}</div>
+                                <div class="text-[9px] text-slate-400 mt-0.5">แตะเพื่อดูใบเสร็จ 👆</div>
                             </div>
-                            <ul class="text-[11px] text-slate-700 space-y-1.5 font-medium px-1">
-                                ${record.items.map(item => `<li class="flex justify-between items-center"><span class="flex items-center gap-1.5"><span class="w-1 h-1 rounded-full bg-slate-300"></span> ${item.name}</span><span class="font-bold text-blue-900 bg-blue-50 px-1.5 rounded">${item.qty} ${item.unit}</span></li>`).join('')}
-                            </ul>
+                            <div class="text-[10px] font-bold text-red-600 bg-red-50 px-2.5 py-1.5 rounded-lg border border-red-100 flex items-center gap-1.5">
+                                ค้าง ${record.items.length} รายการ <i class="fa-solid fa-chevron-right text-red-300"></i>
+                            </div>
                         </div>
                     `).join('');
                 } else {
@@ -443,6 +437,31 @@
                 }
 
             } catch(e) { console.error("แดชบอร์ดโหลดขัดข้อง:", e); }
+        }
+
+        // 🌟 ฟังก์ชันเปิดหน้าต่างใบเสร็จ
+        function openReceipt(index) {
+            const data = globalBorrowData[index];
+            if (!data) return;
+            
+            document.getElementById('receiptSubtitle').innerHTML = `
+                <div class="font-bold text-blue-900 text-base mb-1"><i class="fa-solid fa-user-doctor"></i> ${data.name}</div>
+                <div class="text-[11px] text-slate-500 font-medium">📅 ${data.date} | 🚐 ${data.line}</div>
+            `;
+            
+            const listHtml = data.items.map(item => `
+                <div class="flex justify-between items-center border-b border-slate-200/60 py-2 last:border-0">
+                    <span class="text-[12px] font-semibold text-slate-700 flex items-center gap-2">
+                        <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> ${item.name}
+                    </span>
+                    <span class="font-bold text-blue-900 bg-blue-50 px-2 py-0.5 rounded text-[11px] border border-blue-100">
+                        ${item.qty} ${item.unit}
+                    </span>
+                </div>
+            `).join('');
+            
+            document.getElementById('receiptList').innerHTML = listHtml;
+            document.getElementById('receiptModal').style.display = 'flex';
         }
 
         async function openInventory(modeReturn) {
