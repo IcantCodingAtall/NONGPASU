@@ -307,6 +307,12 @@
         };
         const categoryOrder = ["Syringe ไซริงค์", "Needle เข็ม", "อุปกรณ์จับบังคับ", "อุปกรณ์หัตถการ", "อุปกรณ์จดบันทึก", "อุปกรณ์ Lab", "เวชภัณฑ์", "อุปกรณ์ทั่วไป", "อื่นๆ"];
         const LAB_PCV_REFS = { 'วัว': [24,46], 'ควาย': [24,46], 'แพะ': [22,38], 'แกะ': [22,38] };
+        function getCategoryFor(itemName) {
+            for (const [category, items] of Object.entries(categoryMapping)) {
+                if (items.includes(itemName)) return category;
+            }
+            return "อื่นๆ";
+        }
 
         // 🛠️ ฟังก์ชันสลับหน้าหลัก (SPA Navigation) แก้บั๊กหน้าว่าง 100%
         function showView(viewId) {
