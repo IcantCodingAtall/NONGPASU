@@ -8,7 +8,7 @@ const line = require('@line/bot-sdk');
 const path = require('path');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
-const creds = require('./credentials.json');
+//const creds = require('./credentials.json');
 
 // ตั้งค่ากุญแจดิจิทัลในการเปิดประตูรับส่งข้อความกับระบบ LINE OA Developers
 const middlewareConfig = { 
