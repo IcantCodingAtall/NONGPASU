@@ -313,6 +313,16 @@
             }
             return "อื่นๆ";
         }
+        function fixImageUrl(url) {
+            if (!url) return "https://cdn-icons-png.flaticon.com/512/1516/1516104.png"; // ถ้ารูปไม่มีให้ใส่รูปกล่องพัสดุแทน
+            if (url.includes('drive.google.com/open?id=')) return url.replace('open?id=', 'uc?id=');
+            if (url.includes('drive.google.com/file/d/')) {
+                const id = url.split('/d/')[1].split('/')[0];
+                return `https://drive.google.com/uc?id=${id}`;
+            }
+            return url;
+        }
+        // ===========================================
 
         // 🛠️ ฟังก์ชันสลับหน้าหลัก (SPA Navigation) แก้บั๊กหน้าว่าง 100%
         function showView(viewId) {
