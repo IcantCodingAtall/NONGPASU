@@ -58,6 +58,33 @@
         
         .donut-chart { width: 140px; height: 140px; border-radius: 50%; background: conic-gradient(#00246B 0% 45%, #F8B500 45% 75%, #10B981 75% 90%, #64748B 90% 100%); display: flex; align-items: center; justify-content: center; }
         .donut-inner { width: 90px; height: 90px; background: white; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        /* ปรับแต่งปุ่มยืนยันให้ดูเป็นกล่องสวยๆ */
+        .btn-confirm {
+            background: var(--mu-gold);
+            color: var(--mu-blue);
+            border-radius: 16px;
+            padding: 12px;
+            font-weight: 700;
+            box-shadow: 0 4px 12px rgba(248, 181, 0, 0.3);
+            transition: all 0.2s;
+        }
+        
+        .btn-cancel {
+            background: #f8fafc;
+            color: #94a3b8;
+            border: 2px solid #f1f5f9;
+            border-radius: 16px;
+            padding: 12px;
+            font-weight: 700;
+            transition: all 0.2s;
+        }
+
+        /* เพิ่มความเนียนให้ Modal */
+        .modal-content {
+            border: none;
+            padding: 25px;
+            border-radius: 32px; /* โค้งมนแบบทันสมัย */
+        }
     </style>
 </head>
 <body class="text-slate-800">
@@ -129,15 +156,17 @@
         <div class="bg-[#00246B] p-5 rounded-2xl shadow-md text-white">
             <h3 class="text-xs font-bold text-amber-400 mb-4 uppercase tracking-widest flex items-center gap-1.5"><i class="fa-solid fa-circle-check"></i> จำนวนรวมหัตถการและเวชภัณฑ์</h3>
             <div class="grid grid-cols-3 gap-y-4 gap-x-2 text-center">
-                <div><div id="stat-blood" class="text-xl font-bold">0</div><div class="text-[9px] text-white/60">เจาะเลือด</div></div>
-                <div class="border-x border-white/10"><div id="stat-feces" class="text-xl font-bold">0</div><div class="text-[9px] text-white/60">เก็บอึ</div></div>
-                <div><div id="stat-fmd" class="text-xl font-bold">0</div><div class="text-[9px] text-white/60">วัคซีน FMD</div></div>
-                <div class="border-t border-white/10 pt-2"><div id="stat-lsd" class="text-xl font-bold">0</div><div class="text-[9px] text-white/60">วัคซีน LSD</div></div>
-                <div class="border-t border-x border-white/10 pt-2"><div id="stat-iver" class="text-xl font-bold">0</div><div class="text-[9px] text-white/60">Ivermectin</div></div>
-                <div class="border-t border-white/10 pt-2"><div id="stat-alben" class="text-xl font-bold">0</div><div class="text-[9px] text-white/60">Albendazole</div></div>
-            </div>
-            <div class="border-t border-white/10 mt-3 pt-2 text-center"><div id="stat-vitamin" class="text-lg font-bold text-amber-300">0</div><div class="text-[9px] text-white/60">วิตามินสะสมรวม (ตัว)</div></div>
-        </div>
+    <div><div id="stat-blood" class="text-2xl font-bold text-[#F8B500]">0</div><div class="text-[9px] text-white/60">เจาะเลือด</div></div>
+    <div class="border-x border-white/10"><div id="stat-feces" class="text-2xl font-bold text-[#F8B500]">0</div><div class="text-[9px] text-white/60">เก็บอึ</div></div>
+    <div><div id="stat-fmd" class="text-2xl font-bold text-[#F8B500]">0</div><div class="text-[9px] text-white/60">วัคซีน FMD</div></div>
+    <div class="border-t border-white/10 pt-2"><div id="stat-lsd" class="text-2xl font-bold text-[#F8B500]">0</div><div class="text-[9px] text-white/60">วัคซีน LSD</div></div>
+    <div class="border-t border-x border-white/10 pt-2"><div id="stat-iver" class="text-2xl font-bold text-[#F8B500]">0</div><div class="text-[9px] text-white/60">Ivermectin</div></div>
+    <div class="border-t border-white/10 pt-2"><div id="stat-alben" class="text-2xl font-bold text-[#F8B500]">0</div><div class="text-[9px] text-white/60">Albendazole</div></div>
+</div>
+<div class="border-t border-white/10 mt-3 pt-2 text-center">
+    <div id="stat-vitamin" class="text-3xl font-bold text-[#F8B500]">0</div>
+    <div class="text-[9px] text-amber-200/80 font-bold tracking-widest uppercase mt-1">วิตามินบี</div>
+</div>
 
         <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
             <div class="p-4 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
@@ -258,7 +287,17 @@
             <div class="modal-header">📋 สรุปตรวจสอบข้อมูลออกสาย</div>
             <div class="modal-subtitle" id="logModalSubtitle">วันที่ -- | สาย --</div>
             <div class="modal-body" id="logSummaryList"></div>
-            <div class="modal-footer"><button class="btn-cancel" onclick="document.getElementById('logbookSummaryModal').style.display='none'">❌ แก้ไข</button><button class="btn-confirm" id="confirmLogBtn" onclick="submitAllLogbookData()">✅ ยืนยันข้อมูล</button></div>
+            <div class="modal-footer flex gap-3 mt-6">
+                <button class="flex-1 py-3.5 rounded-2xl border-2 border-slate-100 text-slate-400 font-bold text-sm active:bg-slate-50 transition-all" 
+                        onclick="document.getElementById('logbookSummaryModal').style.display='none'">
+                    ❌ แก้ไขข้อมูล
+                </button>
+                <button id="confirmLogBtn" 
+                        class="flex-1 py-3.5 rounded-2xl bg-[#F8B500] text-[#00246B] font-bold text-sm shadow-[0_4px_15px_rgba(248,181,0,0.3)] active:scale-95 transition-all" 
+                        onclick="submitAllLogbookData()">
+                    ✅ ยืนยันข้อมูล
+                </button>
+            </div>
         </div>
     </div>
 
