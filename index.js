@@ -6,6 +6,24 @@ require('dotenv').config();
 const express = require('express');
 const line = require('@line/bot-sdk');
 const path = require('path');
+
+// 1. บอกให้ Express รู้จักโฟลเดอร์ public (เพื่อดึงไฟล์ html, css, รูปภาพต่างๆ)
+app.use(express.static(path.join(__dirname, 'public')));
+
+// 2. ถ้าเข้าเว็บหน้าแรกเฉยๆ ให้โชว์หน้า Portal (Dashboard)
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'portal.html'));
+});
+
+// 3. เส้นทางสำหรับเข้าหน้า เบิก-คืนอุปกรณ์
+app.get('/inventory', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'inventory.html'));
+});
+
+// 4. เส้นทางสำหรับเข้าหน้า สมุดบันทึก
+app.get('/logbook', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'logbook.html'));
+});
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
 //const creds = require('./credentials.json');
