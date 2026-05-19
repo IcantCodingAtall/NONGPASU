@@ -6,24 +6,37 @@ require('dotenv').config();
 const express = require('express');
 const line = require('@line/bot-sdk');
 const path = require('path');
+const fs = require('fs');
 
-// 1. บอกให้ Express รู้จักโฟลเดอร์ public (เพื่อดึงไฟล์ html, css, รูปภาพต่างๆ)
+// ฟังก์ชันตัวช่วยค้นหาไฟล์ (เช็คว่าไฟล์อยู่ใน public หรืออยู่ด้านนอก)
+function serveHtml(res, fileName) {
+    const publicPath = path.join(__dirname, 'public', fileName);
+    const rootPath = path.join(__dirname, fileName);
+    
+    if (fs.existsSync(publicPath)) {
+        res.sendFile(publicPath);
+    } else if (fs.existsSync(rootPath)) {
+        res.sendFile(rootPath);
+    } else {
+        res.status(404).send(`❌ ไม่พบไฟล์ ${fileName} ในระบบครับ (เช็คตัวพิมพ์เล็ก/ใหญ่ด้วยน้า)`);
+    }
+}
+
+// 1. บอกให้ Express รู้จักไฟล์ทั่วไป (รูปภาพ, CSS)
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname)); // เผื่อไฟล์อยู่ด้านนอกสุด
 
-// 2. ถ้าเข้าเว็บหน้าแรกเฉยๆ ให้โชว์หน้า Portal (Dashboard)
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'portal.html'));
-});
+// 2. ดักทางหน้า Portal (หน้าแรก)
+app.get('/', (req, res) => serveHtml(res, 'portal.html'));
+app.get('/portal.html', (req, res) => serveHtml(res, 'portal.html'));
 
-// 3. เส้นทางสำหรับเข้าหน้า เบิก-คืนอุปกรณ์
-app.get('/inventory', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'inventory.html'));
-});
+// 3. ดักทางหน้า Inventory (เบิก-คืนของ) ครอบคลุมทั้งแบบมีและไม่มี .html
+app.get('/inventory', (req, res) => serveHtml(res, 'inventory.html'));
+app.get('/inventory.html', (req, res) => serveHtml(res, 'inventory.html'));
 
-// 4. เส้นทางสำหรับเข้าหน้า สมุดบันทึก
-app.get('/logbook', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'logbook.html'));
-});
+// 4. ดักทางหน้า Logbook ครอบคลุมทั้งแบบมีและไม่มี .html
+app.get('/logbook', (req, res) => serveHtml(res, 'logbook.html'));
+app.get('/logbook.html', (req, res) => serveHtml(res, 'logbook.html'));
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
 //const creds = require('./credentials.json');
