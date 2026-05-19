@@ -100,7 +100,7 @@
         <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
             <div class="p-4 border-b border-slate-50 flex justify-between items-center bg-blue-50/50">
                 <h3 class="text-xs font-bold text-blue-900 uppercase tracking-tight flex items-center gap-1.5">
-                    <i class="fa-solid fa-boxes-stacked text-[#F8B500]"></i> รายการเบิกค้างคืน (Active Borrows)
+                    <i class="fa-solid fa-boxes-stacked text-[#F8B500]"></i> รายการค้างเบิก (Active Borrows)
                 </h3>
             </div>
             <div id="dash-borrow-status" class="p-4 bg-slate-50/30">
@@ -456,19 +456,24 @@
                 // 🌟 วาดใบเสร็จรายการเบิกค้างคืน
                 const borrowContainer = document.getElementById('dash-borrow-status');
                 globalBorrowData = data.activeBorrows || [];
+                console.log("ข้อมูลที่ได้รับจากหลังบ้าน:", globalBorrowData); // 🌟 เติมบรรทัดนี้
+                
 
                 if (globalBorrowData.length > 0) {
                     borrowContainer.innerHTML = globalBorrowData.map((record, index) => `
                         <div onclick="openReceipt(${index})" class="flex justify-between items-center bg-white border border-slate-200 rounded-xl p-3 shadow-sm mb-2 cursor-pointer active:scale-95 transition-transform">
-                            <div>
-                                <div class="text-xs font-bold text-blue-900"><i class="fa-solid fa-user-doctor text-slate-400 mr-1"></i> ${record.name}</div>
-                                <div class="text-[9px] text-slate-400 mt-0.5">แตะเพื่อดูใบเสร็จ 👆</div>
+                             <div>
+                                <div class="text-xs font-bold text-blue-900">${record.name}</div>
+                                <div class="text-[9px] text-slate-400 mt-0.5 font-medium">
+                                    📅 ${record.date || '-'} | 🚐 ${record.line || '-'}
+                                </div>
+                                <div class="text-[9px] text-blue-400 mt-0.5">แตะเพื่อดูใบเสร็จ 👆</div>
                             </div>
                             <div class="text-[10px] font-bold text-red-600 bg-red-50 px-2.5 py-1.5 rounded-lg border border-red-100 flex items-center gap-1.5">
-                                ค้าง ${record.totalQty} ชิ้น <i class="fa-solid fa-chevron-right text-red-300"></i>
-                            </div>
+                                ค้าง ${record.totalQty || 0} ชิ้น <i class="fa-solid fa-chevron-right text-red-300"></i>
                         </div>
-                    `).join('');
+                    </div>
+                `).join('');
                 } else {
                     borrowContainer.innerHTML = `<div class="text-center text-slate-400 font-bold text-xs py-4">🎉 เยี่ยมมาก! คืนของครบหมดทุกคนแล้วครับ</div>`;
                 }

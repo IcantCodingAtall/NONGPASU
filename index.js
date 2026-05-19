@@ -266,7 +266,7 @@ app.get('/api/dashboard', async (req, res) => {
                 rows.forEach(row => {
                     // Col F (Index 5) = Status
                     const status = (row._rawData[5] || '').toString().trim();
-                    if (status.includes('ยังไม่คืน')) {
+                    if (status !== "" && !status.includes('คืนแล้ว')) {
                         // Col B(1)=Staff, C(2)=Item, D(3)=Amount, G(6)=Date, H(7)=Line
                         const name = row._rawData[1] || 'ไม่ระบุ';
                         const itemName = row._rawData[2] || 'อุปกรณ์';
