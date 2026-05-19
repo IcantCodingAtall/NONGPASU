@@ -4,12 +4,20 @@
 // โหลดค่าคอนฟิกูเรชันความปลอดภัยจากไฟล์ .env และแพ็คเกจเสริมที่จำเป็นในการรันบอท
 require('dotenv').config();
 const express = require('express');
-const line = require('@line/bot-sdk');
 const path = require('path');
 const fs = require('fs');
 
+// โหลดแพ็กเกจอื่นๆ ของพี่ (ถ้ามี)
+// const { Client, middleware } = require('@line/bot-sdk');
+// const { GoogleSpreadsheet } = require('google-spreadsheet');
+
+// 🌟 ต้องประกาศตัวแปร app ก่อนที่จะเรียกใช้งานมัน!
+const app = express(); 
+
+// ==========================================
+// 🎯 โค้ดจัดการหน้าเว็บ (ต้องอยู่ใต้ const app = express() เสมอ)
+// ==========================================
 function serveHtml(res, fileName) {
-    // 🌟 แก้ตรงนี้เป็น 'Public'
     const publicPath = path.join(__dirname, 'Public', fileName);
     const rootPath = path.join(__dirname, fileName);
     
@@ -18,11 +26,11 @@ function serveHtml(res, fileName) {
     } else if (fs.existsSync(rootPath)) {
         res.sendFile(rootPath);
     } else {
-        res.status(404).send(`❌ ไม่พบไฟล์ ${fileName} ในระบบครับ (เช็คตัวพิมพ์เล็ก/ใหญ่ด้วยน้า)`);
+        res.status(404).send(`❌ ไม่พบไฟล์ ${fileName} ในระบบครับ`);
     }
 }
 
-// 🌟 แก้ตรงนี้เป็น 'Public'
+// 🌟 ตอนนี้ app ถูกสร้างแล้ว เรียกใช้ได้เลย!
 app.use(express.static(path.join(__dirname, 'Public')));
 app.use(express.static(__dirname)); 
 
@@ -34,6 +42,8 @@ app.get('/inventory.html', (req, res) => serveHtml(res, 'inventory.html'));
 
 app.get('/logbook', (req, res) => serveHtml(res, 'logbook.html'));
 app.get('/logbook.html', (req, res) => serveHtml(res, 'logbook.html'));
+
+// ... โค้ดส่วนอื่นๆ ของพี่ (พวก Webhook LINE) ต่อจากตรงนี้ลงไป ...
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
 //const creds = require('./credentials.json');
