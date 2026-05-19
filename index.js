@@ -57,12 +57,6 @@ const clientConfig = {
 };
 const client = new line.messagingApi.MessagingApiClient(clientConfig);
 
-// เริ่มต้นระบบเซิร์ฟเวอร์ Express Web Application
-const app = express();
-
-// เปิดสิทธิ์ให้เซิร์ฟเวอร์สามารถเข้าถึงไฟล์หน้าเว็บอินเตอร์เฟสในโฟลเดอร์ public ได้ทั้งหมด
-app.use(express.static(path.join(__dirname, 'public')));
-
 // ⚠️ เปิดระบบ Body Parser เฉพาะช่องทาง API LIFF เท่านั้น เพื่อป้องกันไม่ให้ไปชนลายเซ็น Webhook LINE
 app.use('/api', express.json());
 
