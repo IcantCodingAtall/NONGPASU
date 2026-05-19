@@ -8,9 +8,9 @@ const line = require('@line/bot-sdk');
 const path = require('path');
 const fs = require('fs');
 
-// ฟังก์ชันตัวช่วยค้นหาไฟล์ (เช็คว่าไฟล์อยู่ใน public หรืออยู่ด้านนอก)
 function serveHtml(res, fileName) {
-    const publicPath = path.join(__dirname, 'public', fileName);
+    // 🌟 แก้ตรงนี้เป็น 'Public'
+    const publicPath = path.join(__dirname, 'Public', fileName);
     const rootPath = path.join(__dirname, fileName);
     
     if (fs.existsSync(publicPath)) {
@@ -22,19 +22,16 @@ function serveHtml(res, fileName) {
     }
 }
 
-// 1. บอกให้ Express รู้จักไฟล์ทั่วไป (รูปภาพ, CSS)
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.static(__dirname)); // เผื่อไฟล์อยู่ด้านนอกสุด
+// 🌟 แก้ตรงนี้เป็น 'Public'
+app.use(express.static(path.join(__dirname, 'Public')));
+app.use(express.static(__dirname)); 
 
-// 2. ดักทางหน้า Portal (หน้าแรก)
 app.get('/', (req, res) => serveHtml(res, 'portal.html'));
 app.get('/portal.html', (req, res) => serveHtml(res, 'portal.html'));
 
-// 3. ดักทางหน้า Inventory (เบิก-คืนของ) ครอบคลุมทั้งแบบมีและไม่มี .html
 app.get('/inventory', (req, res) => serveHtml(res, 'inventory.html'));
 app.get('/inventory.html', (req, res) => serveHtml(res, 'inventory.html'));
 
-// 4. ดักทางหน้า Logbook ครอบคลุมทั้งแบบมีและไม่มี .html
 app.get('/logbook', (req, res) => serveHtml(res, 'logbook.html'));
 app.get('/logbook.html', (req, res) => serveHtml(res, 'logbook.html'));
 const { GoogleSpreadsheet } = require('google-spreadsheet');
