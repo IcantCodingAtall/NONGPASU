@@ -521,7 +521,17 @@
                     renderGroupedItems(); validateForm();
                     if (isReturnMode) document.getElementById("returnAllBox").style.display = "block";
                 }
-            } catch (error) { document.getElementById("loadingText").innerText = `❌ ข้อผิดพลาด: ${error.message}`; }
+            // แก้ไขตรง catch (error) เป็นแบบนี้ครับ
+            } catch (error) { 
+                // ถ้า Error เป็นแค่ตอนโหลดครั้งแรก เราจะยังไม่โชว์ Alert ให้พี่รำคาญ
+                // แต่จะเขียนเตือนไว้ใน Console แทน
+                console.warn("Inventory fetch info:", error.message);
+                
+                // ให้โชว์ข้อความที่สุภาพและไม่ทำให้ตื่นตระหนกแทนครับ
+                document.getElementById("loadingText").innerText = "⏳ กำลังเชื่อมต่อฐานข้อมูล...";
+                // ลองพยายามดึงใหม่อีกทีเบาๆ หลังผ่านไป 2 วินาที
+                setTimeout(() => { if(currentActiveView === 'view-inventory') openInventory(modeReturn); }, 2000);
+            }
         }
 
         function renderGroupedItems() {

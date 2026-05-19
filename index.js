@@ -257,48 +257,42 @@ app.get('/api/dashboard', async (req, res) => {
             // ==========================================
             // 📦 ระบบดึงรายการเบิกค้างคืน (รวมยอดคนเดียวกัน)
             // ==========================================
+            // ดึงข้อมูลจาก Log_Takeout (Sheet ของพี่)
             const sheetTakeout = doc.sheetsByTitle['Log_Takeout'];
             let activeBorrowsMap = {};
 
             if (sheetTakeout) {
                 const rows = await sheetTakeout.getRows();
                 rows.forEach(row => {
+                    // Col F (Index 5) = Status
                     const status = (row._rawData[5] || '').toString().trim();
-                    
-                    // ถ้ายังไม่คืน หรือค้าง
-                    if (status === '' || status.includes('ยัง') || status.includes('ค้าง')) {
-                        const date = row._rawData[1] || 'ไม่ระบุวัน';
-                        const line = row._rawData[2] || '-';
-                        const name = row._rawData[3] || 'ไม่ระบุชื่อ';
-                        const itemsStr = row._rawData[4] || '';
+                    if (status.includes('ยังไม่คืน')) {
+                        // Col B(1)=Staff, C(2)=Item, D(3)=Amount, G(6)=Date, H(7)=Line
+                        const name = row._rawData[1] || 'ไม่ระบุ';
+                        const itemName = row._rawData[2] || 'อุปกรณ์';
+                        const qty = parseInt(row._rawData[3]) || 0;
+                        const date = row._rawData[6] || '-';
+                        const line = row._rawData[7] || '-';
 
-                        // ถ้ายังไม่มีชื่อคนนี้ในระบบ ให้สร้างกล่องเก็บข้อมูลใหม่
                         if (!activeBorrowsMap[name]) {
-                            activeBorrowsMap[name] = { name: name, date: date, line: line, totalQty: 0, items: {} };
+                            activeBorrowsMap[name] = { name, date, line, items: {} };
                         }
-
-                        // หั่นข้อความ "Syringe|10|อัน" แล้วเอามารวมยอดกัน
-                        itemsStr.split(',').forEach(itemStr => {
-                            const parts = itemStr.split('|');
-                            if (parts.length >= 2) {
-                                const itemName = parts[0].trim();
-                                const qty = parseInt(parts[1]) || 0;
-                                const unit = parts[2] ? parts[2].trim() : 'ชิ้น';
-
-                                if (itemName && qty > 0) {
-                                    // ถ้ามีอุปกรณ์นี้อยู่แล้วให้บวกเพิ่ม ถ้าไม่มีให้ตั้งต้นใหม่
-                                    if (activeBorrowsMap[name].items[itemName]) {
-                                        activeBorrowsMap[name].items[itemName].qty += qty;
-                                    } else {
-                                        activeBorrowsMap[name].items[itemName] = { name: itemName, qty: qty, unit: unit };
-                                    }
-                                    activeBorrowsMap[name].totalQty += qty;
-                                }
-                            }
-                        });
+                        // รวมยอดถ้าชื่ออุปกรณ์ซ้ำกันในคนเดียว
+                        if (activeBorrowsMap[name].items[itemName]) {
+                            activeBorrowsMap[name].items[itemName].qty += qty;
+                        } else {
+                            activeBorrowsMap[name].items[itemName] = { name: itemName, qty: qty, unit: 'ชิ้น' };
+                        }
                     }
                 });
             }
+            
+            // แปลงให้อยู่ในรูป Array ให้หน้าเว็บอ่านง่าย
+            stats.activeBorrows = Object.values(activeBorrowsMap).map(p => ({
+                ...p,
+                items: Object.values(p.items),
+                totalQty: Object.values(p.items).reduce((a, b) => a + b.qty, 0)
+            }));
 
             // แปลงข้อมูลจากกล่อง (Object) ให้กลายเป็น Array เพื่อส่งให้หน้าเว็บ
             const activeBorrows = Object.values(activeBorrowsMap).map(person => ({
@@ -529,35 +523,43 @@ app.get('/api/my-taken-items', async (req, res) => {
     
     try {
         const doc = await getSheetDoc(); 
-        const takeoutSheet = doc.sheetsByIndex[1]; // แท็บประวัติเบิก
+        const takeoutSheet = doc.sheetsByTitle['Log_Takeout']; // ใช้ชื่อชีทให้ตรง
         const rows = await takeoutSheet.getRows();
         
-        // คัดกรองเอาเฉพาะรายการที่ค้างคืนของคนๆ นั้น
-        const activeTakes = rows.filter(r => r.get('LINE_ID') === userId && (r.get('Status') === 'ยังไม่คืน' || r.get('Status') === 'Pending' || !r.get('Status')));
+        let summary = {}; // ใช้รวมยอดรายการของ
+        let firstRowData = { date: "", line: "" }; // เก็บข้อมูลวันที่/สาย ของรายการแรกที่เจอ
         
-        let defaultDate = ""; 
-        let defaultLine = ""; 
-        const summary = {}; 
-        
-        activeTakes.forEach((row, index) => { 
-            // ดึงวันที่และสายปฏิบัติการ จากรายการแรกที่ค้างอยู่ ส่งกลับไปให้หน้าแอป
-            if (index === 0) {
-                defaultDate = row.get('Camp_Date') || "";
-                defaultLine = row.get('Camp_Line') || "";
-            }
+        rows.forEach((row, index) => {
+            // อ้างอิง Index คอลัมน์ (นับเริ่มจาก 0)
+            // คอลัมน์ E (Index 4) = LINE_ID
+            // คอลัมน์ F (Index 5) = Status
+            // คอลัมน์ C (Index 2) = Item Name
+            // คอลัมน์ D (Index 3) = Amount
+            const rowUserId = (row._rawData[4] || '').toString().trim();
+            const status = (row._rawData[5] || '').toString().trim();
             
-            const name = row.get('Item_Name') || row.get('รายการ'); 
-            const qty = parseInt(row.get('Amount_Taken') || row.get('จำนวน')) || 0; 
-            if (name) summary[name] = (summary[name] || 0) + qty; 
+            if (rowUserId === userId && (status.includes('ยังไม่คืน') || status.includes('Pending') || status === '')) {
+                // เก็บวันที่/สาย จากรายการแรกที่เจอ
+                if (!firstRowData.date) {
+                    firstRowData.date = row._rawData[6] || ""; // คอลัมน์ G (Index 6)
+                    firstRowData.line = row._rawData[7] || ""; // คอลัมน์ H (Index 7)
+                }
+                
+                const name = row._rawData[2] || 'อุปกรณ์';
+                const qty = parseInt(row._rawData[3]) || 0;
+                
+                // รวมยอดของคนเดียวกันเข้าด้วยกัน
+                if (name) summary[name] = (summary[name] || 0) + qty;
+            }
         });
         
-        // ดึงข้อมูลหน่วย (Unit) และ รูปภาพ (Image_URL) จากคลังหลักมาประกบ
+        // ดึงข้อมูลรูป/หน่วย จากชีท Inventory มาประกบ
         const invSheet = doc.sheetsByIndex[0]; 
         const invRows = await invSheet.getRows(); 
         const itemMap = {}; 
         
         invRows.forEach(r => { 
-            const name = r.get('Item_Name') || r.get('รายการ'); 
+            const name = r.get('Item_Name') || r.get('รายการ') || ""; 
             const unit = r.get('Unit') || r.get('ลักษณนาม') || 'ชิ้น'; 
             const image = r.get('Image_URL') || r.get('รูปภาพ') || '';
             if (name) itemMap[name] = { unit, image }; 
@@ -567,13 +569,13 @@ app.get('/api/my-taken-items', async (req, res) => {
             name: name, 
             stock: summary[name], 
             unit: itemMap[name] ? itemMap[name].unit : 'ชิ้น',
-            image: itemMap[name] ? itemMap[name].image : '' // ส่งรูปลิงก์ Drive ไปโชว์หน้าคืนของ
+            image: itemMap[name] ? itemMap[name].image : ''
         }));
         
-        // ส่งกลับไปให้ครบทั้ง รายการ, วันที่, สาย
-        res.json({ items: resultItems, campDate: defaultDate, campLine: defaultLine });
+        res.json({ items: resultItems, campDate: firstRowData.date, campLine: firstRowData.line });
         
     } catch (error) { 
+        console.error("Error API my-taken-items:", error);
         res.status(500).json({ error: error.message }); 
     }
 });
