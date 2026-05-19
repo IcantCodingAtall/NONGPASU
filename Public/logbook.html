@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VVT PASU LOGBOOK</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    
+    <script>
+        tailwind.config = { 
+            theme: { 
+                extend: { 
+                    colors: { mu: { blue: '#00246B', gold: '#F8B500' } },
+                    fontFamily: { sans: ['Sarabun', 'Inter', 'sans-serif'] },
+                    animation: {
+                        fadeIn: 'fadeIn 0.2s ease-out',
+                        slideUp: 'slideUp 0.3s ease-out'
+                    },
+                    keyframes: {
+                        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+                        slideUp: { '0%': { transform: 'translateY(20px)', opacity: '0' }, '100%': { transform: 'translateY(0)', opacity: '1' } }
+                    }
+                } 
+            } 
+        }
+    </script>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen pb-32 font-sans flex flex-col"> <div class="bg-mu-blue text-white p-4 shadow-md text-center sticky top-0 z-20 border-b-4 border-mu-gold">
+        <h1 class="text-base font-bold tracking-wide">🐃 VVT PASU LOGBOOK</h1>
+        <p id="staff-name" class="text-xs text-mu-gold mt-1">Loading profile...</p>
+    </div>
+
+    <div class="flex bg-white sticky top-[72px] z-10 shadow-sm rounded-b-xl overflow-hidden mx-2 mb-3">
+        <button id="sub-proc-btn" onclick="switchSubTab('proc')" class="w-1/2 py-2 text-xs font-bold text-mu-blue border-b-4 border-mu-blue bg-blue-50/30 transition-all">📝 Procedures</button>
+        <button id="sub-lab-btn" onclick="switchSubTab('lab')" class="w-1/2 py-2 text-xs font-bold text-slate-400 border-b-4 border-transparent hover:bg-slate-50 transition-all">🔬 Lab Results</button>
+    </div>
+
+    <div class="max-w-md mx-auto px-3 w-full flex-1">
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-mu-blue mb-3">
+            <h3 class="text-xs font-bold text-mu-blue mb-2">👤 Farm Information</h3>
+            <div class="flex flex-col gap-2 mb-2">
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 mb-1">Date</label>
+                    <select id="g-date" class="w-full border rounded-lg p-2 text-xs bg-slate-50 focus:ring-1 focus:ring-mu-gold outline-none">
+                        <option value="25 พ.ค. 2569">25 พฤษภาคม 2569</option><option value="26 พ.ค. 2569">26 พฤษภาคม 2569</option><option value="27 พ.ค. 2569">27 พฤษภาคม 2569</option><option value="28 พ.ค. 2569">28 พฤษภาคม 2569</option><option value="29 พ.ค. 2569">29 พฤษภาคม 2569</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 mb-1">Line</label>
+                    <select id="g-line" class="w-full border rounded-lg p-2 text-xs bg-slate-50 focus:ring-1 focus:ring-mu-gold outline-none">
+                        <option value="สาย 1">สาย 1</option><option value="สาย 2">สาย 2</option><option value="สาย 3">สาย 3</option><option value="สาย 4">สาย 4</option>
+                    </select>
+                </div>
+            </div>
+            <div class="space-y-2">
+                <input type="text" id="g-owner-name" placeholder="Owner Name" class="w-full border rounded-lg p-2 text-xs outline-none focus:ring-1 bg-slate-50/50">
+                <input type="tel" id="g-owner-phone" placeholder="Phone" class="w-full border rounded-lg p-2 text-xs outline-none focus:ring-1 bg-slate-50/50">
+                <textarea id="g-owner-address" placeholder="Address / Coordinates" rows="2" class="w-full border rounded-lg p-2 text-xs outline-none focus:ring-1 bg-slate-50/50"></textarea>
+            </div>
+        </div>
+
+        <div id="form-proc" class="space-y-3">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <h3 class="text-xs font-bold text-mu-blue border-b pb-2 mb-2">🐮 Head Count</h3>
+                <div class="grid grid-cols-4 gap-2 text-xs">
+                    <div><label class="block text-[10px] text-center text-slate-400 mb-1">วัว</label><input type="number" id="c-cow" value="0" min="0" class="w-full border rounded-lg p-1.5 text-center font-bold text-mu-blue bg-slate-50"></div>
+                    <div><label class="block text-[10px] text-center text-slate-400 mb-1">ควาย</label><input type="number" id="c-buff" value="0" min="0" class="w-full border rounded-lg p-1.5 text-center font-bold text-mu-blue bg-slate-50"></div>
+                    <div><label class="block text-[10px] text-center text-slate-400 mb-1">แพะ</label><input type="number" id="c-goat" value="0" min="0" class="w-full border rounded-lg p-1.5 text-center font-bold text-mu-blue bg-slate-50"></div>
+                    <div><label class="block text-[10px] text-center text-slate-400 mb-1">แกะ</label><input type="number" id="c-sheep" value="0" min="0" class="w-full border rounded-lg p-1.5 text-center font-bold text-mu-blue bg-slate-50"></div>
+                </div>
+            </div>
+            
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <h3 class="text-xs font-bold text-mu-blue border-b pb-2 mb-2">📊 Procedures & Meds</h3>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div><label class="block text-[10px] text-slate-400 mb-1">Blood (ตัว)</label><input type="number" id="h-blood" value="0" min="0" class="w-full border rounded-lg p-1.5 bg-slate-50"></div>
+                    <div><label class="block text-[10px] text-slate-400 mb-1">Feces (ตัว)</label><input type="number" id="h-feces" value="0" min="0" class="w-full border rounded-lg p-1.5 bg-slate-50"></div>
+                    <div><label class="block text-[10px] text-slate-400 mb-1">FMD (ตัว)</label><input type="number" id="h-fmd" value="0" min="0" class="w-full border rounded-lg p-1.5 bg-slate-50"></div>
+                    <div><label class="block text-[10px] text-slate-400 mb-1">LSD (ตัว)</label><input type="number" id="h-lsd" value="0" min="0" class="w-full border rounded-lg p-1.5 bg-slate-50"></div>
+                    <div><label class="block text-[10px] text-slate-400 mb-1">Ivermectin (ตัว)</label><input type="number" id="h-iver" value="0" min="0" class="w-full border rounded-lg p-1.5 bg-slate-50"></div>
+                    <div><label class="block text-[10px] text-slate-400 mb-1">Albendazole (ตัว)</label><input type="number" id="h-alben" value="0" min="0" class="w-full border rounded-lg p-1.5 bg-slate-50"></div>
+                </div>
+                <div class="mt-2 text-xs"><label class="block text-[10px] text-slate-400 mb-1">Vitamin (ตัว)</label><input type="number" id="h-vitamin" value="0" min="0" class="w-full border rounded-lg p-1.5 bg-slate-50"></div>
+                <div class="mt-2 text-xs"><label class="block text-[10px] text-slate-400 mb-1">Others</label><input type="text" id="h-others" placeholder="อื่นๆ ระบุ" class="w-full border rounded-lg p-1.5 bg-slate-50"></div>
+            </div>
+        </div>
+
+        <div id="form-lab" class="hidden space-y-3">
+            <div class="bg-red-50 border border-red-200 p-3 rounded-xl text-[11px] text-red-700 font-bold">⚠️ เลือกระบุเฉพาะตัวที่ตรวจพบความผิดปกติ</div>
+            <div id="lab-entries-container" class="space-y-3"></div>
+            <button type="button" onclick="addLabEntry()" class="w-full bg-slate-200 text-slate-600 py-3 rounded-xl font-bold border-2 border-slate-300 border-dashed hover:bg-slate-300 text-xs shadow-sm transition-all">+ เพิ่มสัตว์ตัวต่อไป</button>
+        </div>
+    </div>
+
+    <div class="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t shadow-lg z-30">
+        <div class="max-w-md mx-auto">
+            <button onclick="showSummaryModal()" class="w-full bg-mu-blue text-white py-3 rounded-2xl font-bold shadow-lg active:scale-95 transition-all text-sm flex justify-center items-center gap-2">
+                📝 ตรวจสอบและยืนยันข้อมูล
+            </button>
+        </div>
+    </div>
+
+    <div id="summaryModal" class="fixed inset-0 bg-mu-blue/80 z-50 hidden justify-center items-center p-4 backdrop-blur-sm animate-fadeIn">
+        <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl flex flex-col max-h-[85vh] animate-slideUp">
+            <div class="p-4 border-b-2 border-mu-gold text-center shrink-0">
+                <h3 class="text-lg font-bold text-mu-blue">📋 สรุปข้อมูลการออกสาย</h3>
+                <p id="modal-subtitle" class="text-xs text-slate-500 mt-1">วันที่ -- | สาย --</p>
+            </div>
+            
+            <div id="summaryContent" class="p-4 overflow-y-auto flex-grow space-y-3 text-sm text-slate-700">
+                </div>
+            
+            <div class="p-4 flex gap-3 shrink-0 border-t border-slate-100">
+                <button onclick="closeSummaryModal()" class="flex-1 py-3 border-2 border-slate-300 text-slate-500 font-bold rounded-xl active:bg-slate-100 transition-all text-sm">❌ กลับไปแก้ไข</button>
+                <button onclick="submitAllData()" id="confirmBtn" class="flex-1 py-3 bg-mu-gold text-mu-blue font-bold rounded-xl shadow-lg active:bg-yellow-500 transition-all text-sm">✅ บันทึกข้อมูล</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let userLineId = ""; let userDisplayName = "หมอสัตวแพทย์"; let animalCounter = 0;
+        const PCV_REFS = { 'วัว': [24,46], 'ควาย': [24,46], 'แพะ': [22,38], 'แกะ': [22,38] };
+
+        function switchSubTab(tab) {
+            if(tab === 'proc') {
+                document.getElementById('form-proc').classList.remove('hidden'); document.getElementById('form-lab').classList.add('hidden');
+                document.getElementById('sub-proc-btn').className = "w-1/2 py-2 text-xs font-bold text-mu-blue border-b-4 border-mu-blue bg-blue-50/30 transition-all";
+                document.getElementById('sub-lab-btn').className = "w-1/2 py-2 text-xs font-bold text-slate-400 border-b-4 border-transparent hover:bg-slate-50 transition-all";
+            } else {
+                document.getElementById('form-proc').classList.add('hidden'); document.getElementById('form-lab').classList.remove('hidden');
+                document.getElementById('sub-lab-btn').className = "w-1/2 py-2 text-xs font-bold text-mu-blue border-b-4 border-mu-blue bg-blue-50/30 transition-all";
+                document.getElementById('sub-proc-btn').className = "w-1/2 py-2 text-xs font-bold text-slate-400 border-b-4 border-transparent hover:bg-slate-50 transition-all";
+            }
+        }
+
+        function liveEvalPcv(input) {
+            const card = input.closest('.lab-card'); const species = card.querySelector('.e-species').value;
+            const val = parseInt(input.value); const span = input.nextElementSibling;
+            if(isNaN(val)) { span.innerHTML = ''; return; }
+            const ref = PCV_REFS[species]; if(!ref) return;
+            if(val < ref[0]) span.innerHTML = '<span class="text-[10px] font-bold text-red-500 bg-red-100 px-1 py-0.5 rounded">🔴 Low</span>';
+            else if(val > ref[1]) span.innerHTML = '<span class="text-[10px] font-bold text-red-500 bg-red-100 px-1 py-0.5 rounded">🔴 High</span>';
+            else span.innerHTML = '<span class="text-[10px] font-bold text-green-600 bg-green-100 px-1 py-0.5 rounded">🟢 Norm</span>';
+        }
+
+        function liveEvalFec(input) {
+            const val = parseInt(input.value); const span = input.nextElementSibling;
+            if(isNaN(val)) { span.innerHTML = ''; return; }
+            if(val === 0) span.innerHTML = '<span class="text-[10px] font-bold text-green-600 bg-green-100 px-1.5 py-0.5 rounded">🟢 Neg</span>';
+            else if(val <= 50) span.innerHTML = '<span class="text-[10px] font-bold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">1+</span>';
+            else if(val <= 300) span.innerHTML = '<span class="text-[10px] font-bold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded">2+</span>';
+            else if(val <= 800) span.innerHTML = '<span class="text-[10px] font-bold text-red-500 bg-red-100 px-1.5 py-0.5 rounded">🔴 3+</span>';
+            else span.innerHTML = '<span class="text-[10px] font-bold text-red-700 bg-red-200 px-1.5 py-0.5 rounded">🚨 4+</span>';
+        }
+
+        function getFecalInputHTML(techClass) {
+            return `
+                <div class="bg-slate-50 p-2 rounded-lg border space-y-1.5 mt-1">
+                    <div class="flex items-center justify-between"><span class="text-xs">Strongyle</span> <div class="flex gap-1 items-center"><input type="number" class="${techClass} border p-1 w-12 text-xs rounded text-center" placeholder="EPG" oninput="liveEvalFec(this)"><span class="w-10 text-right"></span></div></div>
+                    <div class="flex items-center justify-between"><span class="text-xs">Trichuris</span> <div class="flex gap-1 items-center"><input type="number" class="${techClass} border p-1 w-12 text-xs rounded text-center" placeholder="EPG" oninput="liveEvalFec(this)"><span class="w-10 text-right"></span></div></div>
+                    <div class="flex items-center justify-between"><span class="text-xs">Coccidia</span> <div class="flex gap-1 items-center"><input type="number" class="${techClass} border p-1 w-12 text-xs rounded text-center" placeholder="EPG" oninput="liveEvalFec(this)"><span class="w-10 text-right"></span></div></div>
+                    <div class="flex items-center justify-between"><span class="text-xs">Capillaria</span> <div class="flex gap-1 items-center"><input type="number" class="${techClass} border p-1 w-12 text-xs rounded text-center" placeholder="EPG" oninput="liveEvalFec(this)"><span class="w-10 text-right"></span></div></div>
+                    <div class="flex items-center justify-between border-t pt-1"><input type="text" class="${techClass}-other border p-1 w-16 text-[10px] rounded" placeholder="อื่น.."> <div class="flex gap-1 items-center"><input type="number" class="${techClass} border p-1 w-12 text-xs rounded text-center" placeholder="EPG" oninput="liveEvalFec(this)"><span class="w-10 text-right"></span></div></div>
+                </div>
+            `;
+        }
+
+        window.chkNegBlood = function(cb) { if(cb.checked) { cb.closest('.lab-card').querySelectorAll('.e-blood-cb').forEach(b => { if(b !== cb) b.checked = false; }); } };
+        window.chkPosBlood = function(cb) { if(cb.checked) { const n = cb.closest('.lab-card').querySelector('.e-blood-cb[value="Negative"]'); if(n) n.checked = false; } };
+
+        function addLabEntry() {
+            animalCounter++; const container = document.getElementById('lab-entries-container'); const card = document.createElement('div');
+            card.className = "lab-card bg-white p-3 rounded-xl shadow-sm border border-slate-200 relative";
+            card.innerHTML = `
+                <div class="absolute top-0 right-0 bg-red-100 text-red-700 px-3 py-0.5 rounded-bl-lg rounded-tr-xl font-bold text-[10px]">ตัวที่ ${animalCounter}</div>
+                <div class="flex justify-between items-center mb-2 border-b pb-2 mt-2"><span class="font-bold text-red-700 text-xs">เบอร์สัตว์:</span> <input type="text" class="e-animal-no border rounded p-1 w-24 text-xs font-bold text-center bg-slate-50 focus:ring-1 focus:ring-mu-gold" placeholder="V-001"></div>
+                <div class="mb-2"><select class="e-species w-full border rounded p-1 text-xs bg-slate-50 focus:ring-1 focus:ring-mu-gold" onchange="const p=this.closest('.lab-card').querySelector('.e-pcv'); if(p.value) p.dispatchEvent(new Event('input'))"><option value="วัว">วัว (Cow)</option><option value="ควาย">ควาย (Buffalo)</option><option value="แพะ">แพะ (Goat)</option><option value="แกะ">แกะ (Sheep)</option></select></div>
+                <div class="space-y-2">
+                    <div class="border rounded p-2 bg-blue-50/20"><label class="text-xs font-bold text-blue-800 flex justify-between items-center">🩸 PCV (%) <div class="flex items-center gap-1"><input type="number" class="e-pcv border rounded p-1 text-xs w-12 text-center focus:ring-1 focus:ring-mu-gold" placeholder="%" oninput="liveEvalPcv(this)"><span class="w-12 text-right"></span></div></label></div>
+                    <div class="border rounded p-2 bg-red-50/20">
+                        <label class="text-xs font-bold text-red-800 block mb-1">🔬 Blood Smear</label>
+                        <div class="flex flex-wrap gap-1 my-1 text-[10px]">
+                            <label class="cursor-pointer"><input type="checkbox" value="Negative" class="e-blood-cb hidden peer" onchange="chkNegBlood(this)"><div class="px-2 py-0.5 border rounded peer-checked:bg-green-600 peer-checked:text-white bg-white">🟢 Neg</div></label>
+                            <label class="cursor-pointer"><input type="checkbox" value="Anaplasma" class="e-blood-cb hidden peer" onchange="chkPosBlood(this)"><div class="px-2 py-0.5 border rounded peer-checked:bg-red-600 peer-checked:text-white bg-white">Anaplasma</div></label>
+                            <label class="cursor-pointer"><input type="checkbox" value="Babesia" class="e-blood-cb hidden peer" onchange="chkPosBlood(this)"><div class="px-2 py-0.5 border rounded peer-checked:bg-red-600 peer-checked:text-white bg-white">Babesia</div></label>
+                            <label class="cursor-pointer"><input type="checkbox" value="Trypanosoma" class="e-blood-cb hidden peer" onchange="chkPosBlood(this)"><div class="px-2 py-0.5 border rounded peer-checked:bg-red-600 peer-checked:text-white bg-white">Trypanosoma</div></label>
+                            <label class="cursor-pointer"><input type="checkbox" value="Microfilaria" class="e-blood-cb hidden peer" onchange="chkPosBlood(this)"><div class="px-2 py-0.5 border rounded peer-checked:bg-red-600 peer-checked:text-white bg-white">Microfilaria</div></label>
+                        </div>
+                        <input type="text" class="e-blood-other w-full border rounded p-1 text-[11px] mt-1 focus:ring-1 focus:ring-mu-gold" placeholder="เชื้ออื่นๆ">
+                    </div>
+                    <div class="border rounded p-2 bg-amber-50/20"><label class="text-xs font-bold text-amber-800">💩 Floatation</label>${getFecalInputHTML('i-flot')}</div>
+                    <div class="border rounded p-2 bg-orange-50/20"><label class="text-xs font-bold text-orange-800">💩 Sedimentation</label>${getFecalInputHTML('i-sed')}</div>
+                    <div class="border rounded p-2 bg-purple-50/20"><label class="text-xs font-bold text-purple-800 flex justify-between items-center">🧪 Rose Bengal <select class="e-rb border rounded p-1 text-xs focus:ring-1 focus:ring-mu-gold w-20"><option value="">ไม่ได้ตรวจ</option><option value="Positive">🔴 Pos</option><option value="Negative">🟢 Neg</option></select></label></div>
+                </div>
+            `;
+            container.appendChild(card);
+        }
+
+        // ตัวแปรเช็คสถานะการกรอก
+        let isProcFilled = false;
+        let isLabFilled = false;
+        let labAnimalsList = [];
+
+        // 🧠 ฟังก์ชันสร้างบิลสรุปยอด และเปิด Modal
+        function showSummaryModal() {
+            const date = document.getElementById('g-date').value;
+            const line = document.getElementById('g-line').value;
+            document.getElementById('modal-subtitle').innerText = `📅 ${date} | 🚐 ${line}`;
+
+            let html = '';
+
+            // 1. ดึงข้อมูลพาร์ทหัตถการมาเช็ค
+            const cow = parseInt(document.getElementById('c-cow').value) || 0;
+            const buff = parseInt(document.getElementById('c-buff').value) || 0;
+            const goat = parseInt(document.getElementById('c-goat').value) || 0;
+            const sheep = parseInt(document.getElementById('c-sheep').value) || 0;
+            const blood = parseInt(document.getElementById('h-blood').value) || 0;
+            const feces = parseInt(document.getElementById('h-feces').value) || 0;
+            const fmd = parseInt(document.getElementById('h-fmd').value) || 0;
+            const lsd = parseInt(document.getElementById('h-lsd').value) || 0;
+            const iver = parseInt(document.getElementById('h-iver').value) || 0;
+            const alben = parseInt(document.getElementById('h-alben').value) || 0;
+            const vit = parseInt(document.getElementById('h-vitamin').value) || 0;
+            const others = document.getElementById('h-others').value.trim();
+
+            const totalAnimals = cow + buff + goat + sheep;
+            const totalProcs = blood + feces + fmd + lsd + iver + alben + vit;
+            
+            isProcFilled = (totalAnimals > 0 || totalProcs > 0 || others !== "");
+
+            if (isProcFilled) {
+                html += `
+                <div class="bg-blue-50/50 p-3 rounded-xl border border-blue-200 shadow-sm">
+                    <h4 class="font-bold text-mu-blue border-b border-blue-200 pb-1 mb-2 flex justify-between">
+                        <span>📝 สรุปยอดหัตถการ</span>
+                        <span class="bg-mu-blue text-white px-2 py-0.5 rounded-full text-[10px]">สัตว์รวม ${totalAnimals} ตัว</span>
+                    </h4>
+                    <p class="text-xs mb-1"><span class="font-bold text-slate-500">ชนิดสัตว์:</span> วัว ${cow}, ควาย ${buff}, แพะ ${goat}, แกะ ${sheep}</p>
+                    <p class="text-xs mb-1"><span class="font-bold text-slate-500">เก็บตัวอย่าง:</span> เลือด ${blood} | อึ ${feces}</p>
+                    <p class="text-xs mb-1"><span class="font-bold text-slate-500">วัคซีน:</span> FMD ${fmd} | LSD ${lsd}</p>
+                    <p class="text-xs mb-1"><span class="font-bold text-slate-500">ยา/วิตามิน:</span> Iver ${iver} | Alben ${alben} | Vit ${vit}</p>
+                    ${others ? `<p class="text-xs mt-1 text-slate-500"><span class="font-bold">อื่นๆ:</span> ${others}</p>` : ''}
+                </div>`;
+            }
+
+            // 2. ดึงข้อมูลพาร์ทผลแล็บมาเช็ค
+            labAnimalsList = [];
+            document.querySelectorAll('.lab-card').forEach(card => {
+                const no = card.querySelector('.e-animal-no').value.trim();
+                if(no) labAnimalsList.push(no);
+            });
+
+            isLabFilled = labAnimalsList.length > 0;
+
+            if (isLabFilled) {
+                html += `
+                <div class="bg-red-50/50 p-3 rounded-xl border border-red-200 shadow-sm mt-3">
+                    <h4 class="font-bold text-red-700 border-b border-red-200 pb-1 mb-2 flex justify-between">
+                        <span>🔬 สรุปผลแล็บ</span>
+                        <span class="bg-red-600 text-white px-2 py-0.5 rounded-full text-[10px]">พบปัญหา ${labAnimalsList.length} ตัว</span>
+                    </h4>
+                    <p class="text-xs mb-1 text-slate-600"><span class="font-bold text-red-500">เบอร์สัตว์:</span> ${labAnimalsList.join(', ')}</p>
+                    <p class="text-[10px] text-slate-400 mt-2">*ระบบจะส่งการแปรผลแล็บโดยละเอียดเข้าไลน์กลุ่มอีกครั้งครับ</p>
+                </div>`;
+            }
+
+            // ถ้าไม่มีการกรอกข้อมูลอะไรเลยทั้งคู่
+            if (!isProcFilled && !isLabFilled) {
+                return alert("⚠️ กรุณากรอกข้อมูลหัตถการ หรือ ระบุผลแล็บอย่างน้อย 1 รายการก่อนกดยืนยันครับ");
+            }
+
+            document.getElementById('summaryContent').innerHTML = html;
+            document.getElementById('summaryModal').style.display = 'flex';
+        }
+
+        function closeSummaryModal() {
+            document.getElementById('summaryModal').style.display = 'none';
+        }
+
+        // 🧠 ฟังก์ชันยิงข้อมูลรวบยอด (ยิง API พร้อมกันทีเดียว)
+        async function submitAllData() {
+            const btn = document.getElementById('confirmBtn');
+            btn.innerText = '⏳ กำลังบันทึก...';
+            btn.disabled = true;
+
+            const date = document.getElementById('g-date').value;
+            const line = document.getElementById('g-line').value;
+            const ownerName = document.getElementById('g-owner-name').value || "ไม่ระบุ";
+            const ownerPhone = document.getElementById('g-owner-phone').value || "-";
+            const ownerAddress = document.getElementById('g-owner-address').value || "-";
+
+            const apiPromises = [];
+
+            // 1. ถ้ามีข้อมูลหัตถการ ให้แพ็คใส่ Promise
+            if (isProcFilled) {
+                const payloadProc = {
+                    lineId: userLineId || "TEST_ENV", staffName: userDisplayName,
+                    date: date, line: line, ownerName: ownerName, ownerPhone: ownerPhone, ownerAddress: ownerAddress,
+                    cows: document.getElementById('c-cow').value, buffs: document.getElementById('c-buff').value, goats: document.getElementById('c-goat').value, sheeps: document.getElementById('c-sheep').value,
+                    blood: document.getElementById('h-blood').value, feces: document.getElementById('h-feces').value, fmd: document.getElementById('h-fmd').value, lsd: document.getElementById('h-lsd').value, iver: document.getElementById('h-iver').value, alben: document.getElementById('h-alben').value, vitamin: document.getElementById('h-vitamin').value, others: document.getElementById('h-others').value
+                };
+                apiPromises.push(fetch('/api/liff/procedure', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payloadProc) }));
+            }
+
+            // 2. ถ้ามีข้อมูลแล็บ ให้แพ็คใส่ Promise
+            if (isLabFilled) {
+                const animals = [];
+                document.querySelectorAll('.lab-card').forEach(card => {
+                    const no = card.querySelector('.e-animal-no').value; if(!no) return;
+                    let bloodP = []; card.querySelectorAll('.e-blood-cb:checked').forEach(cb => bloodP.push(cb.value));
+                    const oBlood = card.querySelector('.e-blood-other').value.trim(); if(oBlood) bloodP.push(oBlood);
+                    const getFec = (cls) => { let r = []; const inputs = card.querySelectorAll(`.${cls}`); const names = ['Strongyle','Trichuris','Coccidia','Capillaria', card.querySelector(`.${cls}-other`).value]; inputs.forEach((inp, i) => { if(inp.value) r.push({name: names[i]||'อื่น', epg: parseInt(inp.value)}); }); return r; };
+                    
+                    animals.push({ animalNo: no, species: card.querySelector('.e-species').value, labs: { pcv: card.querySelector('.e-pcv').value, bloodParasites: bloodP, roseBengal: card.querySelector('.e-rb').value, flotation: getFec('i-flot'), sedimentation: getFec('i-sed') } });
+                });
+
+                const payloadLab = { lineId: userLineId || "TEST_ENV", staffName: userDisplayName, date: date, line: line, ownerName: ownerName, animals: animals };
+                apiPromises.push(fetch('/api/liff/lab', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payloadLab) }));
+            }
+
+            // 3. ยิงข้อมูลที่แพ็คไว้ทั้งหมดพร้อมกันตูมเดียว!
+            try {
+                await Promise.all(apiPromises);
+                
+                if (liff.isInClient()) {
+                    liff.closeWindow(); // ปิดแอปกลับไปที่ห้องแชท
+                } else {
+                    alert("✅ บันทึกข้อมูลหัตถการ/ผลแล็บ เข้าระบบเรียบร้อยแล้ว! (โหมดทดสอบ)");
+                    closeSummaryModal();
+                    btn.innerText = '✅ บันทึกข้อมูล';
+                    btn.disabled = false;
+                }
+            } catch (error) {
+                console.error("Error submitting data:", error);
+                alert("❌ เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้งครับ");
+                btn.innerText = '✅ บันทึกข้อมูล';
+                btn.disabled = false;
+            }
+        }
+
+        async function initLiff() {
+            try {
+                await liff.init({ liffId: "2010125815-xgzZpzng" }); 
+                if (!liff.isLoggedIn()) liff.login();
+                else { const p = await liff.getProfile(); userLineId = p.userId; userDisplayName = p.displayName; document.getElementById('staff-name').innerText = `👤👨‍⚕️ หมอ: ${userDisplayName}`; }
+            } catch (err) { console.error(err); document.getElementById('staff-name').innerText = `⚠️ Test Mode`; }
+            addLabEntry(); switchSubTab('proc');
+        }
+        initLiff();
+    </script>
+</body>
+</html>

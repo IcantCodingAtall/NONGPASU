@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบคลังอุปกรณ์ออกสาย & สมุดบันทึก - MU VET</title>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <style>
+        :root { --mu-blue: #00246B; --mu-gold: #F8B500; --mu-light: #F0F4F8; --mu-gray: #e2e8f0; }
+        body { font-family: 'Kanit', sans-serif; background-color: var(--mu-light); margin: 0; padding: 0; padding-bottom: 100px; }
+        .header-box { background: linear-gradient(135deg, var(--mu-blue), #003b99); color: white; padding: 20px; text-align: center; position: sticky; top: 0; z-index: 50; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border-bottom: 4px solid var(--mu-gold); }
+        .header-box h2 { margin: 0; font-size: 20px; color: var(--mu-gold); font-weight: bold; }
+        
+        .info-section { background: white; padding: 15px 20px; border-bottom: 1px solid var(--mu-gray); }
+        .info-label { font-weight: 600; color: var(--mu-blue); font-size: 14px; margin-bottom: 5px; display: block; }
+        .info-select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-family: 'Kanit'; font-size: 15px; margin-bottom: 15px; outline: none; background: #fdfdfd; }
+        .info-select:focus { border-color: var(--mu-gold); box-shadow: 0 0 5px rgba(248,181,0,0.2); }
+        .info-select:disabled { background-color: #f1f5f9; color: #475569; border-color: #cbd5e1; opacity: 1; }
+
+        .search-container { padding: 10px 20px; background: white; border-bottom: 1px solid var(--mu-gray); }
+        .search-input { width: 100%; padding: 10px 15px; border: 1px solid #ccc; border-radius: 20px; font-family: 'Kanit'; font-size: 14px; box-sizing: border-box; outline: none; background-color: #f9f9f9; }
+        .search-input:focus { border-color: var(--mu-gold); background-color: white; }
+
+        .category-nav { display: flex; overflow-x: auto; background: white; padding: 10px 15px; border-bottom: 2px solid var(--mu-gray); position: relative; z-index: 9; white-space: nowrap; }
+        .category-nav::-webkit-scrollbar { display: none; }
+        .cat-chip { background: var(--mu-light); color: var(--mu-blue); padding: 6px 15px; border-radius: 20px; margin-right: 10px; font-size: 13px; font-weight: bold; cursor: pointer; border: 1px solid var(--mu-gray); }
+        .cat-chip:active { background: var(--mu-gold); color: white; border-color: var(--mu-gold); }
+
+        .loading { text-align: center; color: var(--mu-blue); font-weight: bold; margin: 30px 0; }
+        .empty-message { text-align: center; color: #64748b; font-size: 16px; margin-top: 40px; font-weight: bold; padding: 20px; }
+        
+        .item-list { padding: 15px; }
+        .category-section { margin-bottom: 25px; }
+        .category-title { color: var(--mu-blue); font-size: 18px; border-bottom: 2px solid var(--mu-gold); padding-bottom: 5px; margin-bottom: 10px; margin-top: 0; }
+        
+        .item-card { background: white; border-radius: 12px; padding: 12px 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .item-info { flex-grow: 1; padding-right: 10px; }
+        .item-name { font-weight: 600; color: var(--mu-blue); font-size: 15px; margin-bottom: 2px; }
+        .item-stock { font-size: 12px; color: #64748b; }
+        .item-stock.low { color: #e11d48; font-weight: bold; }
+        
+        .stepper { display: flex; align-items: center; background: var(--mu-light); border-radius: 8px; overflow: hidden; border: 1px solid var(--mu-gray); }
+        .btn-step { background: white; color: var(--mu-blue); border: none; width: 32px; height: 32px; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        .btn-step:active { background: var(--mu-gray); }
+        .qty-input { width: 35px; text-align: center; border: none; background: transparent; font-family: 'Kanit'; font-size: 15px; font-weight: bold; pointer-events: none; }
+
+        .bottom-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: white; padding: 15px 20px; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; z-index: 40; }
+        .cart-summary { color: var(--mu-blue); font-weight: bold; font-size: 14px; }
+        .btn-submit { background-color: var(--mu-gold); color: var(--mu-blue); border: none; padding: 10px 20px; border-radius: 20px; font-size: 16px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(248, 181, 0, 0.3); transition: 0.3s; }
+        .btn-submit:disabled { background-color: #cbd5e1; color: #94a3b8; box-shadow: none; cursor: not-allowed; }
+
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 36, 107, 0.7); z-index: 100; justify-content: center; align-items: center; padding: 20px; box-sizing: border-box; backdrop-filter: blur(3px); }
+        .modal-content { background: white; width: 100%; max-width: 400px; border-radius: 16px; padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); max-height: 80vh; display: flex; flex-direction: column; }
+        .modal-header { font-size: 18px; color: var(--mu-blue); font-weight: bold; margin-bottom: 5px; text-align: center; border-bottom: 2px solid var(--mu-gold); padding-bottom: 10px; }
+        .modal-subtitle { font-size: 13px; color: #64748b; text-align: center; margin-bottom: 15px; }
+        .modal-body { overflow-y: auto; flex-grow: 1; margin-bottom: 20px; padding-right: 5px; }
+        .summary-item { display: flex; justify-content: space-between; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px dashed var(--mu-gray); }
+        .summary-name { font-weight: 600; color: #334155; font-size: 14px; flex: 1; padding-right: 10px;}
+        .summary-qty { font-weight: bold; color: var(--mu-blue); font-size: 14px; white-space: nowrap;}
+        .modal-footer { display: flex; gap: 10px; }
+        .btn-cancel { background: white; color: #ef4444; border: 2px solid #ef4444; padding: 12px; border-radius: 25px; font-weight: bold; flex: 1; cursor: pointer; font-family: 'Kanit'; font-size: 15px;}
+        .btn-confirm { background: var(--mu-gold); color: var(--mu-blue); border: none; padding: 12px; border-radius: 25px; font-weight: bold; flex: 1; cursor: pointer; font-family: 'Kanit'; font-size: 15px;}
+
+        .btn-return-all { width: 100%; padding: 12px; border-radius: 12px; border: 2px dashed #ef4444; background: #fef2f2; color: #dc2626; font-family: 'Kanit'; font-size: 15px; font-weight: bold; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px;}
+        
+        /* Donut Chart Graphics Style */
+        .donut-chart { width: 140px; height: 140px; border-radius: 50%; background: conic-gradient(#00246B 0% 45%, #F8B500 45% 75%, #10B981 75% 90%, #64748B 90% 100%); display: flex; align-items: center; justify-content: center; }
+        .donut-inner { width: 90px; height: 90px; background: white; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <div class="header-box flex justify-between items-center px-4">
+        <button id="btn-back" onclick="goHome()" class="hidden text-white text-xl p-2 bg-white/10 rounded-full active:scale-95"><i class="fa-solid fa-arrow-left"></i></button>
+        <div class="flex-1 text-center">
+            <h2 id="mainTitle">🏥 MU VET PORTAL</h2>
+            <div id="staff-name-display" class="text-xs text-white/80 mt-1">⏳ กำลังเชื่อมต่อระบบ...</div>
+        </div>
+        <div class="w-8" id="header-spacer"></div>
+    </div>
+
+    <div id="view-portal" class="max-w-md mx-auto w-full p-4 space-y-5">
+        
+        <div class="grid grid-cols-3 gap-2">
+            <button onclick="openInventory(false)" class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center gap-1 active:bg-blue-50">
+                <span class="text-2xl">📤</span><span class="text-xs font-bold text-mu-blue">เบิกอุปกรณ์</span>
+            </button>
+            <button onclick="openInventory(true)" class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center gap-1 active:bg-red-50">
+                <span class="text-2xl">📥</span><span class="text-xs font-bold text-red-600">คืนอุปกรณ์</span>
+            </button>
+            <button onclick="openLogbook()" class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center gap-1 active:bg-amber-50">
+                <span class="text-2xl">📋</span><span class="text-xs font-bold text-amber-600">กรอก Logbook</span>
+            </button>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+            <h3 class="text-xs font-bold text-blue-900 mb-3 flex items-center justify-between uppercase tracking-wide">
+                <span><i class="fa-solid fa-users text-green-500 mr-1.5"></i> ผู้ใช้งานที่กำลังออนไลน์ขณะนี้</span>
+                <span class="flex items-center gap-1 text-[9px] text-green-600 bg-green-50 px-2 py-0.5 rounded-full font-bold">
+                    <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span> LIVE NOW
+                </span>
+            </h3>
+            <div id="dash-active-users" class="space-y-1.5 text-xs">
+                <div class="text-slate-400 italic text-center py-2">⏳ กำลังตรวจสัญญาณชีพผู้ใช้งาน...</div>
+            </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+            <h3 class="text-xs font-bold text-blue-900 mb-4 flex items-center gap-1.5 uppercase tracking-wide"><i class="fa-solid fa-chart-pie text-amber-500"></i> สัดส่วนชนิดสัตว์ที่ทำหัตถการ</h3>
+            <div class="flex items-center justify-between">
+                <div class="donut-chart">
+                    <div class="donut-inner">
+                        <span id="dash-total-animals" class="text-xl font-bold text-blue-950">0</span>
+                        <span class="text-[8px] text-slate-400 font-bold uppercase">Total Head</span>
+                    </div>
+                </div>
+                <div id="dash-animal-legends" class="flex-1 ml-5 space-y-1.5 text-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-[#00246B]"></span> วัว</span>
+                        <span id="dash-cow-count" class="font-bold text-slate-700">0 ตัว</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-[#F8B500]"></span> ควาย</span>
+                        <span id="dash-buff-count" class="font-bold text-slate-700">0 ตัว</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-[#10B981]"></span> แพะ</span>
+                        <span id="dash-goat-count" class="font-bold text-slate-700">0 ตัว</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span> แกะ</span>
+                        <span id="dash-sheep-count" class="font-bold text-slate-700">0 ตัว</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-[#00246B] p-5 rounded-2xl shadow-md text-white">
+            <h3 class="text-xs font-bold text-amber-400 mb-4 uppercase tracking-widest flex items-center gap-1.5"><i class="fa-solid fa-circle-check"></i> จำนวนรวมหัตถการและเวชภัณฑ์</h3>
+            <div class="grid grid-cols-3 gap-y-4 gap-x-2 text-center">
+                <div><div id="stat-blood" class="text-xl font-bold">0</div><div class="text-[9px] text-white/60">เจาะเลือด</div></div>
+                <div class="border-x border-white/10"><div id="stat-feces" class="text-xl font-bold">0</div><div class="text-[9px] text-white/60">เก็บอึ</div></div>
+                <div><div id="stat-fmd" class="text-xl font-bold">0</div><div class="text-[9px] text-white/60">วัคซีน FMD</div></div>
+                <div class="border-t border-white/10 pt-2"><div id="stat-lsd" class="text-xl font-bold">0</div><div class="text-[9px] text-white/60">วัคซีน LSD</div></div>
+                <div class="border-t border-x border-white/10 pt-2"><div id="stat-iver" class="text-xl font-bold">0</div><div class="text-[9px] text-white/60">Ivermectin</div></div>
+                <div class="border-t border-white/10 pt-2"><div id="stat-alben" class="text-xl font-bold">0</div><div class="text-[9px] text-white/60">Albendazole</div></div>
+            </div>
+            <div class="border-t border-white/10 mt-3 pt-2 text-center"><div id="stat-vitamin" class="text-lg font-bold text-amber-300">0</div><div class="text-[9px] text-white/60">วิตามินสะสมรวม (ตัว)</div></div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            <div class="p-4 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
+                <h3 class="text-xs font-bold text-blue-900 uppercase tracking-tight flex items-center gap-1.5"><i class="fa-solid fa-triangle-exclamation text-red-500"></i> รายงานผลแล็บผิดปกติ (ห้องปฏิบัติการ)</h3>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50 text-blue-900 font-bold border-b border-slate-200">
+                            <th class="p-3">ID / ชนิด</th>
+                            <th class="p-3">เจ้าของ</th>
+                            <th class="p-3 text-red-600">การแปรผลที่พบความผิดปกติ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dash-lab-table" class="divide-y divide-slate-100 text-slate-700">
+                        <tr><td colspan="3" class="p-4 text-center italic text-slate-400">กำลังเชื่อมต่อข้อมูลผลแล็บ...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="view-inventory" class="hidden max-w-md mx-auto w-full">
+        <div class="info-section">
+            <label class="info-label" id="labelDate">📅 วันที่ออกค่ายปฏิบัติการ:</label>
+            <select id="campDate" class="info-select" onchange="validateForm()">
+                <option value="">-- เลือกวันที่ --</option>
+                <option value="25 พฤษภาคม">25 พฤษภาคม</option><option value="26 พฤษภาคม">26 พฤษภาคม</option><option value="27 พฤษภาคม">27 พฤษภาคม</option><option value="28 พฤษภาคม">28 พฤษภาคม</option><option value="29 พฤษภาคม">29 พฤษภาคม</option>
+            </select>
+
+            <label class="info-label" id="labelLine" style="margin-top:-5px;">🚐 สายปฏิบัติการ:</label>
+            <select id="campLine" class="info-select" style="margin-bottom:0;" onchange="validateForm()">
+                <option value="">-- เลือกสายปฏิบัติการ --</option>
+                <option value="สาย 1">สาย 1</option><option value="สาย 2">สาย 2</option><option value="สาย 3">สาย 3</option><option value="สาย 4">สาย 4</option>
+            </select>
+        </div>
+
+        <div class="search-container" id="searchBox" style="display:none;">
+            <input type="text" id="searchInput" class="search-input" placeholder="🔍 ค้นหาอุปกรณ์..." onkeyup="filterItems()">
+        </div>
+
+        <div class="category-nav" id="catNav"></div>
+
+        <div id="returnAllBox" style="display: none; padding: 15px 15px 0 15px;">
+            <button class="btn-return-all" onclick="setReturnAllMax()">🔄 คืนอุปกรณ์ทั้งหมด (เต็มจำนวน)</button>
+        </div>
+
+        <div id="loadingText" class="loading">⏳ กำลังเชื่อมต่อระบบคลังสินค้า...</div>
+        <div id="emptyView" class="empty-message" style="display:none;"></div>
+        <div class="item-list" id="itemsContainer"></div>
+
+        <div class="bottom-bar">
+            <div class="cart-summary" id="summaryLabel">เลือกแล้ว: <span id="totalItems">0</span> รายการ</div>
+            <button id="btnSubmit" class="btn-submit" onclick="showSummaryModal()" disabled>📦 ยืนยัน</button>
+        </div>
+    </div>
+
+    <div id="view-logbook" class="hidden max-w-md mx-auto w-full px-3 pt-3">
+        <div class="flex bg-white shadow-sm rounded-xl overflow-hidden mb-3 border">
+            <button id="sub-proc-btn" onclick="switchLogbookTab('proc')" class="w-1/2 py-2.5 text-xs font-bold text-mu-blue border-b-4 border-mu-blue bg-blue-50/30 transition-all">📝 หัตถการ</button>
+            <button id="sub-lab-btn" onclick="switchLogbookTab('lab')" class="w-1/2 py-2.5 text-xs font-bold text-slate-400 border-b-4 border-transparent hover:bg-slate-50 transition-all">🔬 ผลแล็บ</button>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-l-4 border-l-mu-blue mb-3">
+            <h3 class="text-xs font-bold text-mu-blue mb-2">👤 ข้อมูลฟาร์ม</h3>
+            <div class="grid grid-cols-2 gap-2 mb-2">
+                <select id="logDate" class="w-full border rounded-lg p-2 text-xs bg-slate-50 outline-none"><option value="">-- เลือกวันที่ --</option><option value="25 พฤษภาคม">25 พฤษภาคม</option><option value="26 พฤษภาคม">26 พฤษภาคม</option><option value="27 พฤษภาคม">27 พฤษภาคม</option><option value="28 พฤษภาคม">28 พฤษภาคม</option><option value="29 พฤษภาคม">29 พฤษภาคม</option></select>
+                <select id="logLine" class="w-full border rounded-lg p-2 text-xs bg-slate-50 outline-none"><option value="">-- เลือกสาย --</option><option value="สาย 1">สาย 1</option><option value="สาย 2">สาย 2</option><option value="สาย 3">สาย 3</option><option value="สาย 4">สาย 4</option></select>
+            </div>
+            <div class="space-y-2">
+                <input type="text" id="g-owner-name" placeholder="ชื่อเจ้าของฟาร์ม" class="w-full border rounded-lg p-2 text-xs bg-slate-50/50">
+                <input type="tel" id="g-owner-phone" placeholder="เบอร์โทรศัพท์" class="w-full border rounded-lg p-2 text-xs bg-slate-50/50">
+                <textarea id="g-owner-address" placeholder="ที่อยู่ฟาร์ม / พิกัด GPS" rows="2" class="w-full border rounded-lg p-2 text-xs bg-slate-50/50"></textarea>
+            </div>
+        </div>
+
+        <div id="log-form-proc" class="space-y-3">
+            <div class="bg-white p-4 rounded-xl shadow-sm border">
+                <h3 class="text-xs font-bold text-mu-blue border-b pb-2 mb-2">🐮 จำนวนสัตว์ทั้งหมด</h3>
+                <div class="grid grid-cols-4 gap-2 text-xs">
+                    <div><label class="block text-center text-slate-400 mb-1">วัว</label><input type="number" id="c-cow" value="0" min="0" class="w-full border rounded-lg p-1.5 text-center font-bold text-mu-blue bg-slate-50"></div>
+                    <div><label class="block text-center text-slate-400 mb-1">ควาย</label><input type="number" id="c-buff" value="0" min="0" class="w-full border rounded-lg p-1.5 text-center font-bold text-mu-blue bg-slate-50"></div>
+                    <div><label class="block text-center text-slate-400 mb-1">แพะ</label><input type="number" id="c-goat" value="0" min="0" class="w-full border rounded-lg p-1.5 text-center font-bold text-mu-blue bg-slate-50"></div>
+                    <div><label class="block text-center text-slate-400 mb-1">แกะ</label><input type="number" id="c-sheep" value="0" min="0" class="w-full border rounded-lg p-1.5 text-center font-bold text-mu-blue bg-slate-50"></div>
+                </div>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border">
+                <h3 class="text-xs font-bold text-mu-blue border-b pb-2 mb-2">📊 รายการบริการหัตถการ</h3>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div><label class="block text-slate-400 mb-1">เจาะเลือด (ตัว)</label><input type="number" id="h-blood" value="0" min="0" class="w-full border rounded-lg p-1.5 bg-slate-50"></div>
+                    <div><label class="block text-slate-400 mb-1">เก็บอึ (ตัว)</label><input type="number" id="h-feces" value="0" min="0" class="w-full border rounded-lg p-1.5 bg-slate-50"></div>
+                    <div><label class="block text-slate-400 mb-1">วัคซีน FMD (ตัว)</label><input type="number" id="h-fmd" value="0" min="0" class="w-full border rounded-lg p-1.5 bg-slate-50"></div>
+                    <div><label class="block text-slate-400 mb-1">วัคซีน LSD (ตัว)</label><input type="number" id="h-lsd" value="0" min="0" class="w-full border rounded-lg p-1.5 bg-slate-50"></div>
+                    <div><label class="block text-slate-400 mb-1">Ivermectin (ตัว)</label><input type="number" id="h-iver" value="0" min="0" class="w-full border rounded-lg p-1.5 bg-slate-50"></div>
+                    <div><label class="block text-slate-400 mb-1">Albendazole (ตัว)</label><input type="number" id="h-alben" value="0" min="0" class="w-full border rounded-lg p-1.5 bg-slate-50"></div>
+                </div>
+                <div class="mt-2 text-xs"><label class="block text-slate-400 mb-1">Vitamin (ตัว)</label><input type="number" id="h-vitamin" value="0" min="0" class="w-full border rounded-lg p-1.5 bg-slate-50"></div>
+                <div class="mt-2 text-xs"><label class="block text-slate-400 mb-1">บันทึกหัตถการอื่นๆเพิ่มเติม</label><input type="text" id="h-others" placeholder="ระบุหัตถการพิเศษ" class="w-full border rounded-lg p-1.5 bg-slate-50"></div>
+            </div>
+        </div>
+
+        <div id="log-form-lab" class="hidden space-y-3">
+            <div id="lab-entries-container" class="space-y-3"></div>
+            <button type="button" onclick="addLabEntry()" class="w-full bg-slate-200 text-slate-600 py-3 rounded-xl font-bold border-2 border-slate-300 border-dashed hover:bg-slate-300 text-xs shadow-sm">+ เพิ่มสัตว์ตัวต่อไป</button>
+        </div>
+
+        <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t z-30">
+            <button onclick="showLogbookSummaryModal()" class="w-full max-w-md mx-auto block bg-mu-blue text-white py-3 rounded-2xl font-bold shadow-lg text-sm">📝 ตรวจสอบและยืนยันข้อมูล</button>
+        </div>
+    </div>
+
+    <div id="summaryModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header" id="modalTitle">📝 ตรวจสอบรายการ</div>
+            <div class="modal-subtitle" id="modalSubtitle">วันที่ -- | สาย --</div>
+            <div class="modal-body" id="summaryList"></div>
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="closeSummaryModal()">❌ แก้ไข</button>
+                <button class="btn-confirm" onclick="submitForm()">✅ ยืนยันข้อมูล</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="logbookSummaryModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">📋 สรุปตรวจสอบข้อมูลออกสาย</div>
+            <div class="modal-subtitle" id="logModalSubtitle">วันที่ -- | สาย --</div>
+            <div class="modal-body" id="logSummaryList"></div>
+            <div class="modal-footer">
+                <button class="btn-cancel" onclick="document.getElementById('logbookSummaryModal').style.display='none'">❌ แก้ไข</button>
+                <button class="btn-confirm" id="confirmLogBtn" onclick="submitAllLogbookData()">✅ ยืนยันข้อมูล</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let inventoryData = [];
+        let isReturnMode = false;
+        let myLineId = "";
+        let staffDisplayName = "เจ้าหน้าที่สัตวแพทย์";
+        let animalCounter = 0;
+        let currentActiveView = "view-portal"; // 🆕 ติดตามสถานะหน้าปัจจุบันสำหรับผูกระบุระบบ Live Presence
+
+        // ตารางล็อกกลุ่มอุปกรณ์จับบังคับ
+        const categoryMapping = {
+            "Syringe ไซริงค์": ["Syringe พลาสติก 3 ml", "Syringe พลาสติก 5 ml", "Syringe พลาสติก 10 ml", "Syringe พลาสติก 20 ml", "Syringe แก้ว 5ml", "Syringe แก้ว 10ml"],
+            "Needle เข็ม": ["Needle พลาสติก 18Gx1", "Needle พลาสติก 18Gx1.5", "Needle พลาสติก 20Gx1", "Needle พลาสติก 21Gx1", "Needle พลาสติก 22Gx1", "Needle เหล็ก 18x1", "Needle เหล็ก 18x3/4", "Needle เหล็ก 18x1.5"],
+            "อุปกรณ์จับบังคับ": ["เชือกยาว", "เชือกคางเรือ", "เชือกแดง", "ถุงมือจับบังคับ", "กล่องเก็บเชือก"],
+            "อุปกรณ์หัตถการ": ["กระปุกแอลกอฮอล์", "สำลีดีนี่", "สำลีตราพยาบาล", "กล่องเครื่องมือ", "สเปรย์เบตาดีน", "ถุงขยะดำ", "ถุงขยะแดง", "แปรงขัดบูท", "ไขควง", "กระติกใส่ albendazole", "Alcohol", "กระปุกทิ้ง Needle", "ถุงมือยาง S", "ถุงมือยาง M", "ถุงมือยาง L"],
+            "อุปกรณ์จดบันทึก": ["แฟ้มจดบันทึก", "กระดาษจดบันทึก", "กระดาษ Checklist"],
+            "อุปกรณ์ Lab": ["Clot Tube", "EDTA Tube", "ตะกร้าหลอดเก็บเลือด", "ตะแกรงหลอดเก็บเลือด", "Rack โฟม", "ซองเก็บตัวอย่าง"],
+            "เวชภัณฑ์": ["Ivomec-F", "MectinVet", "Baymec", "NovaB", "DexamVet", "Albendazole"],
+            "อุปกรณ์ทั่วไป": ["หม้อต้มไซริงค์", "แปรงขัดไซริงค์" , "คัมภีร์ปศุสัตว์", "O ring"]
+        };
+        const categoryOrder = ["Syringe ไซริงค์", "Needle เข็ม", "อุปกรณ์จับบังคับ", "อุปกรณ์หัตถการ", "อุปกรณ์จดบันทึก", "อุปกรณ์ Lab", "เวชภัณฑ์", "อุปกรณ์ทั่วไป", "อื่นๆ"];
+        const LAB_PCV_REFS = { 'วัว': [24,46], 'ควาย': [24,46], 'แพะ': [22,38], 'แกะ': [22,38] };
+
+        // 🛠️ ฟังก์ชันสลับหน้าหลัก (SPA Navigation) แก้บั๊กหน้าว่าง 100%
+        function showView(viewId) {
+            document.getElementById('view-portal').classList.add('hidden');
+            document.getElementById('view-inventory').classList.add('hidden');
+            document.getElementById('view-logbook').classList.add('hidden');
+            
+            document.getElementById(viewId).classList.remove('hidden');
+            currentActiveView = viewId; // บันทึกหน้าจอที่ผู้ใช้กำลังเปิดอยู่
+            
+            const backBtn = document.getElementById('btn-back');
+            const spacer = document.getElementById('header-spacer');
+            const titleEl = document.getElementById('mainTitle');
+
+            if (viewId === 'view-portal') {
+                backBtn.classList.add('hidden');
+                spacer.classList.remove('hidden');
+                titleEl.innerText = "🏥 MU VET PORTAL";
+                fetchDashboardStats(); 
+            } else {
+                backBtn.classList.remove('hidden');
+                spacer.classList.add('hidden');
+                if (viewId === 'view-inventory') titleEl.innerText = isReturnMode ? "🔙 คืนอุปกรณ์ออกสาย" : "📤 เบิกอุปกรณ์ VET";
+                if (viewId === 'view-logbook') titleEl.innerText = "📝 CLINIC LOGBOOK";
+            }
+            sendPresenceHeartbeat(); // ยิงสัญญาณชีพสลับสเตตัสในระบบทันทีเมื่อเปลี่ยนหน้า
+            window.scrollTo(0,0);
+        }
+
+        function goHome() { showView('view-portal'); }
+
+        // ==========================================
+        // 🆕 ระบบยิงสัญญาณชีพ และดึงรายชื่อคนเข้าใช้งาน (Live Presence Engine)
+        // ==========================================
+        async function sendPresenceHeartbeat() {
+            try {
+                // คำนวณคำบรรยายสเตตัสตามหน้างานจริงของหมอคนนั้นๆ
+                let currentStatus = "กำลังดูหน้าหลัก แดชบอร์ด";
+                if (currentActiveView === 'view-inventory') {
+                    currentStatus = isReturnMode ? "กำลังทำรายการคืนของ 📥" : "กำลังทำรายการเบิกของ 📤";
+                } else if (currentActiveView === 'view-logbook') {
+                    currentStatus = "กำลังคีย์ข้อมูล Logbook 📝";
+                }
+
+                const res = await fetch('/api/presence', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        lineId: myLineId || "TEST_ENV",
+                        name: staffDisplayName || "หมอสัตวแพทย์",
+                        status: currentStatus
+                    })
+                });
+                
+                const activeUsersList = await res.json();
+                const usersContainer = document.getElementById('dash-active-users');
+                
+                if (usersContainer) {
+                    if (activeUsersList && activeUsersList.length > 0) {
+                        usersContainer.innerHTML = activeUsersList.map(u => `
+                            <div class="flex items-center justify-between p-2 bg-slate-50 rounded-xl border border-slate-100 shadow-sm animate-fadeIn">
+                                <span class="font-bold text-slate-700"><i class="fa-solid fa-user-doctor text-blue-900 mr-1.5"></i> หมอ${u.name}</span>
+                                <span class="text-[10px] bg-blue-50 text-mu-blue px-2.5 py-0.5 rounded-full font-bold border border-blue-100">${u.status || 'ออนไลน์'}</span>
+                            </div>
+                        `).join('');
+                    } else {
+                        usersContainer.innerHTML = `<div class="text-slate-400 italic text-center py-2">ไม่มีผู้ใช้งานอื่นแสตนบายอยู่</div>`;
+                    }
+                }
+            } catch (e) { console.error("ระบบตรวจจับผู้ใช้งานสแตนบายขัดข้อง:", e.message); }
+        }
+
+        // ==========================================
+        // 📈 DASHBOARD ENGINE (ดึงสถิติจากหลังบ้านขึ้นแดชบอร์ด)
+        // ==========================================
+        async function fetchDashboardStats() {
+            try {
+                const res = await fetch('/api/dashboard');
+                const data = await res.json();
+                
+                const cows = parseInt(data.animals['วัว']||0);
+                const buffs = parseInt(data.animals['ควาย']||0);
+                const goats = parseInt(data.animals['แพะ']||0);
+                const sheeps = parseInt(data.animals['แกะ']||0);
+                const totalHead = cows + buffs + goats + sheeps;
+                
+                document.getElementById('dash-total-animals').innerText = totalHead;
+                document.getElementById('dash-cow-count').innerText = `${cows} ตัว`;
+                document.getElementById('dash-buff-count').innerText = `${buffs} ตัว`;
+                document.getElementById('dash-goat-count').innerText = `${goats} ตัว`;
+                document.getElementById('dash-sheep-count').innerText = `${sheeps} ตัว`;
+                
+                if (totalHead > 0) {
+                    const p1 = (cows / totalHead) * 100;
+                    const p2 = p1 + ((buffs / totalHead) * 100);
+                    const p3 = p2 + ((goats / totalHead) * 100);
+                    document.querySelector('.donut-chart').style.background = `conic-gradient(#00246B 0% ${p1}%, #F8B500 ${p1}% ${p2}%, #10B981 ${p2}% ${p3}%, #64748B ${p3}% 100%)`;
+                }
+
+                document.getElementById('stat-blood').innerText = data.procedures['Blood'] || 0;
+                document.getElementById('stat-feces').innerText = data.procedures['Feces'] || 0;
+                document.getElementById('stat-fmd').innerText = data.procedures['FMD'] || 0;
+                document.getElementById('stat-lsd').innerText = data.procedures['LSD'] || 0;
+                document.getElementById('stat-iver').innerText = data.procedures['Ivermectin'] || 0;
+                document.getElementById('stat-alben').innerText = data.procedures['Albendazole'] || 0;
+                document.getElementById('stat-vitamin').innerText = data.procedures['Vitamin'] || 0;
+
+                const tbody = document.getElementById('dash-lab-table');
+                if (data.abnormalLabs && data.abnormalLabs.length > 0) {
+                    tbody.innerHTML = data.abnormalLabs.map(row => `
+                        <tr class="hover:bg-slate-50 border-b border-slate-100">
+                            <td class="p-3 font-bold text-blue-900">${row.animal}<br><span class="text-[10px] bg-slate-100 text-slate-500 px-1 py-0.2 rounded font-normal">${row.species}</span></td>
+                            <td class="p-3 text-slate-600 font-medium">${row.farm}</td>
+                            <td class="p-3 text-[11px] font-semibold text-slate-900 leading-tight">${row.issues}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="3" class="p-4 text-center text-slate-400 italic">🎉 คลีนิกไร้ประวัติเคสแล็บผิดปกติในช่วงนี้ครับ</td></tr>`;
+                }
+            } catch(e) { console.error("แดชบอร์ดโหลดขัดข้อง:", e); }
+        }
+
+        // ==========================================
+        // 📦 INVENTORY MODULE (ระบบคลังอุปกรณ์ออกสาย)
+        // ==========================================
+        async function openInventory(modeReturn) {
+            isReturnMode = modeReturn;
+            showView('view-inventory');
+            
+            document.getElementById("loadingText").style.display = "block";
+            document.getElementById("emptyView").style.display = "none";
+            document.getElementById("itemsContainer").innerHTML = "";
+            document.getElementById("catNav").innerHTML = "";
+            document.getElementById("returnAllBox").style.display = "none";
+            document.getElementById("searchBox").style.display = isReturnMode ? "none" : "block";
+
+            try {
+                let apiUrl = isReturnMode ? `/api/my-taken-items?userId=${myLineId||'TEST_ENV'}` : '/api/inventory';
+                const response = await fetch(apiUrl, { headers: { 'ngrok-skip-browser-warning': 'true' } });
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+
+                if (isReturnMode) {
+                    inventoryData = data.items.map((item, index) => ({ ...item, selectedQty: 0, originalIndex: index }));
+                    if (data.campDate) { document.getElementById("campDate").value = data.campDate; document.getElementById("campDate").disabled = true; }
+                    if (data.campLine) { document.getElementById("campLine").value = data.campLine; document.getElementById("campLine").disabled = true; }
+                } else {
+                    inventoryData = data.map((item, index) => ({ ...item, selectedQty: 0, originalIndex: index }));
+                    document.getElementById("campDate").disabled = false; document.getElementById("campLine").disabled = false;
+                    document.getElementById("campDate").value = ""; document.getElementById("campLine").value = "";
+                }
+                
+                document.getElementById("loadingText").style.display = "none";
+
+                if (inventoryData.length === 0) {
+                    const msg = isReturnMode ? "🎉 คุณไม่มีรายการอุปกรณ์ค้างคืนในระบบครับ" : "📦 ไม่พบข้อมูลอุปกรณ์ในคลังสินค้า";
+                    const emptyView = document.getElementById("emptyView"); emptyView.innerText = msg; emptyView.style.display = "block";
+                } else {
+                    renderGroupedItems(); validateForm();
+                    if (isReturnMode) document.getElementById("returnAllBox").style.display = "block";
+                }
+            } catch (error) { document.getElementById("loadingText").innerText = `❌ ข้อผิดพลาด: ${error.message}`; }
+        }
+
+        function renderGroupedItems() {
+            const container = document.getElementById("itemsContainer"); const navContainer = document.getElementById("catNav");
+            container.innerHTML = ''; navContainer.innerHTML = '';
+            const groupedData = {}; categoryOrder.forEach(cat => groupedData[cat] = []);
+            inventoryData.forEach(item => { const cat = getCategoryFor(item.name); if(groupedData[cat]) groupedData[cat].push(item); });
+
+            categoryOrder.forEach(cat => {
+                if (groupedData[cat].length > 0) {
+                    navContainer.insertAdjacentHTML('beforeend', `<div class="cat-chip" onclick="scrollToCat('${cat}')">${cat}</div>`);
+                    let sectionHtml = `<div class="category-section" id="sec-${cat}"><h3 class="category-title">${cat}</h3>`;
+                    groupedData[cat].forEach(item => {
+                        const labelText = isReturnMode ? `เคยเบิกไป: ${item.stock}` : `คงเหลือ: ${item.stock}`;
+                        const stockClass = (!isReturnMode && item.stock <= 5) ? 'low' : '';
+                        sectionHtml += `
+                            <div class="item-card" data-name="${item.name.toLowerCase()}">
+                                <div style="display: flex; align-items: center; flex-grow: 1; min-w-0;">
+                                    <img src="${fixImageUrl(item.image)}" style="width: 48px; height: 48px; object-fit: cover; border-radius: 8px; margin-right: 12px; background-color: #f1f5f9; border: 1px solid var(--mu-gray); flex-shrink: 0;">
+                                    <div class="item-info" style="min-w-0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                        <div class="item-name" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.name}</div>
+                                        <div class="item-stock ${stockClass}">${labelText} ${item.unit}</div>
+                                    </div>
+                                </div>
+                                <div class="stepper" style="flex-shrink: 0; margin-left: 10px;">
+                                    <button class="btn-step" onclick="updateQty(${item.originalIndex}, -1)">-</button>
+                                    <input type="text" id="qty-${item.originalIndex}" class="qty-input" value="${item.selectedQty}" readonly>
+                                    <button class="btn-step" onclick="updateQty(${item.originalIndex}, 1)">+</button>
+                                </div>
+                            </div>`;
+                    });
+                    sectionHtml += `</div>`; container.insertAdjacentHTML('beforeend', sectionHtml);
+                }
+            });
+        }
+
+        function scrollToCat(catName) { const section = document.getElementById(`sec-${catName}`); if (section) window.scrollTo({ top: section.getBoundingClientRect().top + window.scrollY - 80, behavior: 'smooth' }); }
+
+        function setReturnAllMax() {
+            if (!confirm('ยืนยันการทำรายการกดคืนอุปกรณ์ "เต็มจำนวน" ทุกรายการใช่หรือไม่?')) return;
+            inventoryData.forEach(item => { item.selectedQty = item.stock; const inputEl = document.getElementById(`qty-${item.originalIndex}`); if (inputEl) inputEl.value = item.stock; });
+            validateForm();
+        }
+
+        function updateQty(originalIndex, change) {
+            let item = inventoryData[originalIndex]; let newQty = item.selectedQty + change;
+            if (newQty < 0) newQty = 0;
+            if (newQty > item.stock) { alert(isReturnMode ? `คุณเบิกไอเทมนี้ไปทั้งหมดแค่ ${item.stock} ${item.unit} ครับ` : `ของในคลังมีแค่อยู่ ${item.stock} ${item.unit} ครับ`); newQty = item.stock; }
+            item.selectedQty = newQty; document.getElementById(`qty-${originalIndex}`).value = newQty; validateForm();
+        }
+
+        function validateForm() {
+            const campDate = document.getElementById("campDate").value; const campLine = document.getElementById("campLine").value;
+            const totalItems = inventoryData.filter(i => i.selectedQty > 0).length;
+            document.getElementById("totalItems").innerText = totalItems;
+            document.getElementById("btnSubmit").disabled = !(campDate !== "" && campLine !== "" && totalItems > 0);
+        }
+
+        function filterItems() {
+            const searchText = document.getElementById("searchInput").value.toLowerCase();
+            document.querySelectorAll(".item-card").forEach(card => card.style.display = card.getAttribute("data-name").includes(searchText) ? "flex" : "none");
+            document.querySelectorAll(".category-section").forEach(sec => sec.style.display = Array.from(sec.querySelectorAll('.item-card')).filter(c => c.style.display !== 'none').length > 0 ? "block" : "none");
+        }
+
+        function showSummaryModal() {
+            const campDate = document.getElementById("campDate").value; const campLine = document.getElementById("campLine").value;
+            const selectedItems = inventoryData.filter(i => i.selectedQty > 0); if (selectedItems.length === 0 || !campDate || !campLine) return;
+            document.getElementById("modalSubtitle").innerText = `📅 ${campDate} | 🚐 ${campLine}`;
+            const summaryList = document.getElementById("summaryList"); summaryList.innerHTML = '';
+            selectedItems.forEach(item => { summaryList.insertAdjacentHTML('beforeend', `<div class="summary-item"><div class="summary-name">${item.name}</div><div class="summary-qty">${isReturnMode ? "เหลือกลับมา" : "เบิกจำนวน"} ${item.selectedQty} ${item.unit}</div></div>`); });
+            document.getElementById("summaryModal").style.display = "flex";
+        }
+
+        function closeSummaryModal() { document.getElementById("summaryModal").style.display = "none"; }
+
+        async function submitForm() {
+            const confirmBtn = document.querySelector('.btn-confirm'); confirmBtn.innerText = "กำลังบันทึก..."; confirmBtn.disabled = true;
+            const campDate = document.getElementById("campDate").value; const campLine = document.getElementById("campLine").value;
+            const selectedItems = inventoryData.filter(i => i.selectedQty > 0);
+            const payload = selectedItems.map(i => `${i.name}|${i.selectedQty}|${i.unit}`).join(',');
+            const messageText = `${isReturnMode ? "#คืนของรวม" : "#เบิกของรวม"}\nDate=${campDate}\nLine=${campLine}\nItems=${payload}`;
+
+            if (liff.isInClient()) { await liff.sendMessages([{ type: "text", text: messageText }]); liff.closeWindow(); } 
+            else { alert(`[โหมดเบราว์เซอร์] จำลองการส่ง:\n\n${messageText}`); closeSummaryModal(); confirmBtn.innerText = "✅ ยืนยันข้อมูล"; confirmBtn.disabled = false; goHome(); }
+        }
+
+        // ==========================================
+        // 📝 LOGBOOK MODULE (ระบบบันทึกหัตถการและผลแล็บ)
+        // ==========================================
+        function openLogbook() {
+            showView('view-logbook');
+            if (document.getElementById('lab-entries-container').children.length === 0) addLabEntry();
+            switchLogbookTab('proc');
+        }
+
+        function switchLogbookTab(tabName) {
+            document.getElementById('log-form-proc').classList.toggle('hidden', tabName !== 'proc');
+            document.getElementById('log-form-lab').classList.toggle('hidden', tabName !== 'lab');
+            document.getElementById('sub-proc-btn').className = tabName === 'proc' ? "w-1/2 py-2.5 text-xs font-bold text-mu-blue border-b-4 border-mu-blue bg-blue-50/30 transition-all" : "w-1/2 py-2.5 text-xs font-bold text-slate-400 border-b-4 border-transparent hover:bg-slate-50 transition-all";
+            document.getElementById('sub-lab-btn').className = tabName === 'lab' ? "w-1/2 py-2.5 text-xs font-bold text-mu-blue border-b-4 border-mu-blue bg-blue-50/30 transition-all" : "w-1/2 py-2.5 text-xs font-bold text-slate-400 border-b-4 border-transparent hover:bg-slate-50 transition-all";
+        }
+
+        function addLabEntry() {
+            animalCounter++; const container = document.getElementById('lab-entries-container'); const card = document.createElement('div');
+            card.className = "lab-card bg-white p-3 rounded-xl shadow-sm border border-slate-200 relative";
+            card.innerHTML = `
+                <div class="absolute top-0 right-0 bg-red-100 text-red-700 px-3 py-0.5 rounded-bl-lg rounded-tr-xl font-bold text-[10px]">ตัวที่ ${animalCounter}</div>
+                <div class="flex justify-between items-center mb-2 border-b pb-2 mt-2"><span class="font-bold text-red-700 text-xs">เบอร์สัตว์:</span> <input type="text" class="e-animal-no border rounded p-1 w-24 text-xs font-bold text-center bg-slate-50" placeholder="V-001"></div>
+                <div class="mb-2"><select class="e-species w-full border rounded p-1 text-xs bg-slate-50" onchange="const p=this.closest('.lab-card').querySelector('.e-pcv'); if(p.value) p.dispatchEvent(new Event('input'))"><option value="วัว">วัว</option><option value="ควาย">ควาย</option><option value="แพะ">แพะ</option><option value="แกะ">แกะ</option></select></div>
+                <div class="space-y-2">
+                    <div class="border rounded p-2 bg-blue-50/20"><label class="text-xs font-bold text-blue-800 flex justify-between items-center">🩸 PCV (%) <div class="flex items-center gap-1"><input type="number" class="e-pcv border rounded p-1 text-xs w-12 text-center" placeholder="%" oninput="liveEvalPcv(this)"><span class="w-12 text-right"></span></div></label></div>
+                    <div class="border rounded p-2 bg-red-50/20">
+                        <label class="text-xs font-bold text-red-800 block mb-1">🔬 Blood Smear</label>
+                        <div class="flex flex-wrap gap-1 my-1 text-[10px]">
+                            <label class="cursor-pointer"><input type="checkbox" value="Negative" class="e-blood-cb hidden peer" onchange="chkNegBlood(this)"><div class="px-2 py-0.5 border rounded peer-checked:bg-green-600 peer-checked:text-white bg-white">🟢 Neg</div></label>
+                            <label class="cursor-pointer"><input type="checkbox" value="Anaplasma" class="e-blood-cb hidden peer" onchange="chkPosBlood(this)"><div class="px-2 py-0.5 border rounded peer-checked:bg-red-600 peer-checked:text-white bg-white">Anaplasma</div></label>
+                            <label class="cursor-pointer"><input type="checkbox" value="Babesia" class="e-blood-cb hidden peer" onchange="chkPosBlood(this)"><div class="px-2 py-0.5 border rounded peer-checked:bg-red-600 peer-checked:text-white bg-white">Babesia</div></label>
+                            <label class="cursor-pointer"><input type="checkbox" value="Trypanosoma" class="e-blood-cb hidden peer" onchange="chkPosBlood(this)"><div class="px-2 py-0.5 border rounded peer-checked:bg-red-600 peer-checked:text-white bg-white">Trypanosoma</div></label>
+                        </div>
+                        <input type="text" class="e-blood-other w-full border rounded p-1 text-[11px] mt-1" placeholder="เชื้ออื่นๆ">
+                    </div>
+                    <div class="border rounded p-2 bg-amber-50/20"><label class="text-xs font-bold text-amber-800">💩 Floatation</label>${getFecalInputHTML('i-flot')}</div>
+                    <div class="border rounded p-2 bg-orange-50/20"><label class="text-xs font-bold text-orange-800">💩 Sedimentation</label>${getFecalInputHTML('i-sed')}</div>
+                    <div class="border rounded p-2 bg-purple-50/20"><label class="text-xs font-bold text-purple-800 flex justify-between items-center">🧪 Rose Bengal <select class="e-rb border rounded p-1 text-xs w-20"><option value="">ไม่ได้ตรวจ</option><option value="Positive">🔴 Pos</option><option value="Negative">🟢 Neg</option></select></label></div>
+                </div>`;
+            container.appendChild(card);
+        }
+
+        function showLogbookSummaryModal() {
+            const date = document.getElementById('logDate').value; const line = document.getElementById('logLine').value;
+            if(!date || !line) return alert("⚠️ กรุณาเลือกวันที่และสายปฏิบัติการด้านบนก่อนครับ");
+
+            const v = id => parseInt(document.getElementById(id).value) || 0;
+            const totalAnimals = v('c-cow') + v('c-buff') + v('c-goat') + v('c-sheep');
+            const totalProcs = v('h-blood') + v('h-feces') + v('h-fmd') + v('h-lsd') + v('h-iver') + v('h-alben') + v('h-vitamin');
+            const others = document.getElementById('h-others').value.trim();
+            isProcFilled = (totalAnimals > 0 || totalProcs > 0 || others !== "");
+
+            labAnimalsList = []; document.querySelectorAll('.lab-card').forEach(c => { const n = c.querySelector('.e-animal-no').value.trim(); if(n) labAnimalsList.push(n); });
+            isLabFilled = labAnimalsList.length > 0;
+
+            if (!isProcFilled && !isLabFilled) return alert("⚠️ กรุณากรอกข้อมูลหัตถการหรือผลแล็บอย่างน้อย 1 รายการก่อนตรวจสอบครับ");
+
+            document.getElementById('logModalSubtitle').innerText = `📅 ${date} | 🚐 ${line}`;
+            const container = document.getElementById('logSummaryList'); container.innerHTML = '';
+
+            if (isProcFilled) {
+                container.insertAdjacentHTML('beforeend', `
+                    <div class="bg-blue-50 p-3 rounded-xl border mb-3">
+                        <h4 class="font-bold text-mu-blue text-xs mb-1">📝 สรุปบันทึกยอดหัตถการ</h4>
+                        <p class="text-[11px] text-slate-600">สัตว์รวม: วัว ${v('c-cow')} | ควาย ${v('c-buff')} | แพะ ${v('c-goat')} | แกะ ${v('c-sheep')}</p>
+                        <p class="text-[11px] text-slate-600 mt-1">เก็บตัวอย่าง: เลือด ${v('h-blood')} | อึ ${v('h-feces')}</p>
+                        <p class="text-[11px] text-slate-600">วัคซีน/ยา: FMD ${v('h-fmd')} | LSD ${v('h-lsd')} | ถ่ายพยาธิ ${v('h-iver') + v('h-alben')}</p>
+                    </div>`);
+            }
+            if (isLabFilled) {
+                container.insertAdjacentHTML('beforeend', `
+                    <div class="bg-red-50 p-3 rounded-xl border">
+                        <h4 class="font-bold text-red-700 text-xs mb-1">🔬 สรุปบันทึกผลแล็บผิดปกติ</h4>
+                        <p class="text-[11px] text-red-600">พบความผิดปกติจำนวน: ${labAnimalsList.length} ตัว</p>
+                    </div>`);
+            }
+            document.getElementById('logbookSummaryModal').style.display = 'flex';
+        }
+
+        async function submitAllLogbookData() {
+            const btn = document.getElementById('confirmLogBtn'); btn.innerText = "กำลังบันทึก..."; btn.disabled = true;
+            const date = document.getElementById('logDate').value; const line = document.getElementById('logLine').value;
+            const ownerName = document.getElementById('g-owner-name').value || "ไม่ระบุ";
+            const apiPromises = [];
+
+            if (isProcFilled) {
+                const payloadProc = {
+                    lineId: myLineId || "TEST_ENV", staffName: staffDisplayName, date: date, line: line, ownerName: ownerName,
+                    ownerPhone: document.getElementById('g-owner-phone').value || "-", ownerAddress: document.getElementById('g-owner-address').value || "-",
+                    cows: document.getElementById('c-cow').value, buffs: document.getElementById('c-buff').value, goats: document.getElementById('c-goat').value, sheeps: document.getElementById('c-sheep').value,
+                    blood: document.getElementById('h-blood').value, feces: document.getElementById('h-feces').value, fmd: document.getElementById('h-fmd').value, lsd: document.getElementById('h-lsd').value, iver: document.getElementById('h-iver').value, alben: document.getElementById('h-alben').value, vitamin: document.getElementById('h-vitamin').value, others: document.getElementById('h-others').value
+                };
+                apiPromises.push(fetch('/api/liff/procedure', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payloadProc) }));
+            }
+
+            if (isLabFilled) {
+                const animals = [];
+                document.querySelectorAll('.lab-card').forEach(card => {
+                    const no = card.querySelector('.e-animal-no').value; if(!no) return;
+                    let bloodP = []; card.querySelectorAll('.e-blood-cb:checked').forEach(cb => bloodP.push(cb.value));
+                    const oBlood = card.querySelector('.e-blood-other').value.trim(); if(oBlood) bloodP.push(oBlood);
+                    const getFec = (cls) => { let r = []; const inputs = card.querySelectorAll(`.${cls}`); const names = ['Strongyle','Trichuris','Coccidia','Capillaria', card.querySelector(`.${cls}-other`).value]; inputs.forEach((inp, i) => { if(inp.value) r.push({name: names[i]||'อื่น', epg: parseInt(inp.value)}); }); return r; };
+                    animals.push({ animalNo: no, species: card.querySelector('.e-species').value, labs: { pcv: card.querySelector('.e-pcv').value, bloodParasites: bloodP, roseBengal: card.querySelector('.e-rb').value, flotation: getFec('i-flot'), sedimentation: getFec('i-sed') } });
+                });
+                const payloadLab = { lineId: myLineId || "TEST_ENV", staffName: staffDisplayName, date: date, line: line, ownerName: ownerName, animals: animals };
+                apiPromises.push(fetch('/api/liff/lab', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payloadLab) }));
+            }
+
+            try {
+                const responses = await Promise.all(apiPromises);
+                if (responses.some(r => !r.ok)) throw new Error("API Failure");
+                alert("✅ บันทึกข้อมูลหัตถการและผลแล็บเรียบร้อยแล้ว!");
+                if (liff.isInClient()) liff.closeWindow(); else { document.getElementById('logbookSummaryModal').style.display = 'none'; btn.innerText = "✅ ยืนยันข้อมูล"; btn.disabled = false; goHome(); }
+            } catch (error) { alert("❌ เกิดข้อผิดพลาดในการบันทึก!"); btn.innerText = "✅ ยืนยันข้อมูล"; btn.disabled = false; }
+        }
+
+        // ==========================================
+        // ⚙️ INITIALIZATION SYSTEM
+        // ==========================================
+        async function initializeLiff() {
+            try {
+                await liff.init({ liffId: "2010125977-E8l1g7Zp" }); 
+                if (liff.isLoggedIn() || liff.isInClient()) {
+                    const profile = await liff.getProfile(); myLineId = profile.userId; staffDisplayName = profile.displayName;
+                    document.getElementById("staff-name-display").innerText = `👤 ยินดีต้อนรับ, หมอ ${staffDisplayName}`;
+                } else { liff.login(); }
+            } catch(e) { document.getElementById("staff-name-display").innerText = `⚠️ TEST LOCAL ENVIRONMENT (BROWSER)`; }
+            
+            showView('view-portal'); 
+            
+            // 🌟 ตั้งเวลาให้ส่งสัญญาณชีพและอัปเดตรายชื่อคนออนไลน์ทุกๆ 5 วินาทีแบบ Realtime 🔄
+            setInterval(sendPresenceHeartbeat, 5000);
+        }
+        initializeLiff();
+    </script>
+</body>
+</html>
