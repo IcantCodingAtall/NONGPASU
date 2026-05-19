@@ -251,7 +251,45 @@ app.get('/api/dashboard', async (req, res) => {
                 }
             });
         }
-        res.json(stats);
+        // ==========================================
+            // 📦 ระบบดึงรายการเบิกค้างคืน (Active Borrows)
+            // ==========================================
+            const sheetTakeout = doc.sheetsByTitle['Log_Takeout'];
+            let activeBorrows = [];
+
+            if (sheetTakeout) {
+                const rows = await sheetTakeout.getRows();
+                activeBorrows = rows
+                    .filter(row => {
+                        // เช็คคอลัมน์ F (ดัชนี 5) ว่าว่างเปล่า หรือมีคำว่า "ยังไม่คืน" หรือ "ค้าง"
+                        const status = (row._rawData[5] || '').toString().trim();
+                        return status === '' || status.includes('ยัง') || status.includes('ค้าง');
+                    })
+                    .map(row => {
+                        // อ้างอิงตามคอลัมน์: B(1)=วันที่, C(2)=สาย, D(3)=ชื่อ, E(4)=รายการของ
+                        const date = row._rawData[1] || 'ไม่ระบุวัน';
+                        const line = row._rawData[2] || '-';
+                        const name = row._rawData[3] || 'ไม่ระบุชื่อ';
+                        const itemsStr = row._rawData[4] || '';
+
+                        // หั่นข้อความ "Syringe|10|อัน, Needle|5|เล่ม" ออกมาเป็นชิ้นๆ
+                        const itemsList = itemsStr.split(',').map(itemStr => {
+                            const parts = itemStr.split('|');
+                            return {
+                                name: parts[0] ? parts[0].trim() : 'อุปกรณ์',
+                                qty: parseInt(parts[1]) || 0,
+                                unit: parts[2] ? parts[2].trim() : 'ชิ้น'
+                            };
+                        }).filter(i => i.qty > 0);
+
+                        return { name, date, line, items: itemsList };
+                    });
+            }
+            // ==========================================
+        // 🌟 บรรทัดที่เติมเพิ่ม: ยัดข้อมูลใบเสร็จค้างคืนเข้าไปในตัวแปร stats เดิม
+            stats.activeBorrows = activeBorrows;
+
+            res.json(stats);
     } catch (err) {
         res.status(500).json({ error: "Dashboard Load Failed" });
     }
