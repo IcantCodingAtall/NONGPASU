@@ -7,12 +7,12 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 
-// โหลดแพ็กเกจอื่นๆ ของพี่ (ถ้ามี)
-// const { Client, middleware } = require('@line/bot-sdk');
-// const { GoogleSpreadsheet } = require('google-spreadsheet');
+// 🌟 เติมบรรทัดนี้กลับเข้าไปครับ! เพื่อให้ระบบรู้จักคำว่า 'line'
+const line = require('@line/bot-sdk'); 
 
-// 🌟 ต้องประกาศตัวแปร app ก่อนที่จะเรียกใช้งานมัน!
-const app = express(); 
+const app = express();
+
+// ... โค้ดส่วนอื่นๆ ที่เราทำไว้ ...
 
 // ==========================================
 // 🎯 โค้ดจัดการหน้าเว็บ (ต้องอยู่ใต้ const app = express() เสมอ)
