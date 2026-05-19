@@ -313,6 +313,56 @@
             }
             return "อื่นๆ";
         }
+        // ===========================================
+        // 🌟 ชุดฟังก์ชันของหน้า ผลแล็บ (ที่ทำหล่นหายไปครับ!) 🌟
+        // ===========================================
+        
+        // ฟังก์ชันวาดช่องกรอกผลตรวจอึ
+        function getFecalInputHTML(cls) {
+            return `
+            <div class="grid grid-cols-2 gap-1 mt-1 text-[10px]">
+                <div class="flex items-center gap-1"><input type="number" class="${cls} border rounded p-1 w-full" placeholder="Strongyle"></div>
+                <div class="flex items-center gap-1"><input type="number" class="${cls} border rounded p-1 w-full" placeholder="Trichuris"></div>
+                <div class="flex items-center gap-1"><input type="number" class="${cls} border rounded p-1 w-full" placeholder="Coccidia"></div>
+                <div class="flex items-center gap-1"><input type="number" class="${cls} border rounded p-1 w-full" placeholder="Capillaria"></div>
+            </div>
+            <div class="mt-1 flex gap-1">
+                <input type="text" class="${cls}-other border rounded p-1 text-[10px] flex-1" placeholder="เชื้ออื่นๆ">
+                <input type="number" class="${cls} border rounded p-1 text-[10px] w-16" placeholder="EPG">
+            </div>
+            `;
+        }
+
+        // ฟังก์ชันประเมินค่า PCV แบบเรียลไทม์ (สูง/ต่ำ/ปกติ)
+        function liveEvalPcv(input) {
+            const card = input.closest('.lab-card');
+            const species = card.querySelector('.e-species').value;
+            const val = parseInt(input.value);
+            const span = input.nextElementSibling;
+            if(!val) { span.innerText = ''; return; }
+            const refs = LAB_PCV_REFS[species] || [0, 100];
+            if(val < refs[0]) span.innerHTML = '<span class="text-red-500 font-bold">ต่ำ</span>';
+            else if(val > refs[1]) span.innerHTML = '<span class="text-red-500 font-bold">สูง</span>';
+            else span.innerHTML = '<span class="text-green-500 font-bold">ปกติ</span>';
+        }
+
+        // ฟังก์ชันติ๊กผลเลือด Negative แล้วเคลียร์ตัวอื่น
+        function chkNegBlood(cb) {
+            const container = cb.closest('.flex');
+            if(cb.checked) {
+                container.querySelectorAll('.e-blood-cb').forEach(c => { if(c !== cb) c.checked = false; });
+            }
+        }
+
+        // ฟังก์ชันติ๊กเจอพยาธิเม็ดเลือด แล้วเอา Negative ออก
+        function chkPosBlood(cb) {
+            if(cb.checked) {
+                const container = cb.closest('.flex');
+                const negCb = container.querySelector('input[value="Negative"]');
+                if(negCb) negCb.checked = false;
+            }
+        }
+        // ===========================================
         function fixImageUrl(url) {
             if (!url) return "https://cdn-icons-png.flaticon.com/512/1516/1516104.png"; // ถ้ารูปไม่มีให้ใส่รูปกล่องพัสดุแทน
             if (url.includes('drive.google.com/open?id=')) return url.replace('open?id=', 'uc?id=');
