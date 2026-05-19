@@ -318,17 +318,18 @@
         // ===========================================
         
         // ฟังก์ชันวาดช่องกรอกผลตรวจอึ
+        // ฟังก์ชันวาดช่องกรอกผลตรวจอึ (แบบแยกช่อง EPG ชัดเจน)
         function getFecalInputHTML(cls) {
             return `
-            <div class="grid grid-cols-2 gap-1 mt-1 text-[10px]">
-                <div class="flex items-center gap-1"><input type="number" class="${cls} border rounded p-1 w-full" placeholder="Strongyle"></div>
-                <div class="flex items-center gap-1"><input type="number" class="${cls} border rounded p-1 w-full" placeholder="Trichuris"></div>
-                <div class="flex items-center gap-1"><input type="number" class="${cls} border rounded p-1 w-full" placeholder="Coccidia"></div>
-                <div class="flex items-center gap-1"><input type="number" class="${cls} border rounded p-1 w-full" placeholder="Capillaria"></div>
+            <div class="grid grid-cols-2 gap-2 mt-2 text-[10px]">
+                <div class="flex flex-col"><label class="text-slate-600 mb-1 font-semibold">Strongyle</label><input type="number" class="${cls} border rounded p-1.5 w-full bg-white text-center" placeholder="ค่า EPG"></div>
+                <div class="flex flex-col"><label class="text-slate-600 mb-1 font-semibold">Trichuris</label><input type="number" class="${cls} border rounded p-1.5 w-full bg-white text-center" placeholder="ค่า EPG"></div>
+                <div class="flex flex-col"><label class="text-slate-600 mb-1 font-semibold">Coccidia</label><input type="number" class="${cls} border rounded p-1.5 w-full bg-white text-center" placeholder="ค่า EPG"></div>
+                <div class="flex flex-col"><label class="text-slate-600 mb-1 font-semibold">Capillaria</label><input type="number" class="${cls} border rounded p-1.5 w-full bg-white text-center" placeholder="ค่า EPG"></div>
             </div>
-            <div class="mt-1 flex gap-1">
-                <input type="text" class="${cls}-other border rounded p-1 text-[10px] flex-1" placeholder="เชื้ออื่นๆ">
-                <input type="number" class="${cls} border rounded p-1 text-[10px] w-16" placeholder="EPG">
+            <div class="mt-2 flex gap-2 text-[10px]">
+                <div class="flex-1 flex flex-col"><label class="text-slate-600 mb-1 font-semibold">เชื้ออื่นๆ (ระบุชื่อ)</label><input type="text" class="${cls}-other border rounded p-1.5 w-full bg-white" placeholder="พิมพ์ชื่อเชื้อ"></div>
+                <div class="w-16 flex flex-col"><label class="text-slate-600 mb-1 font-semibold">EPG</label><input type="number" class="${cls} border rounded p-1.5 w-full bg-white text-center" placeholder="ค่า EPG"></div>
             </div>
             `;
         }
