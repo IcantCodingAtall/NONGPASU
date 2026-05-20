@@ -258,6 +258,7 @@ app.get('/api/dashboard', async (req, res) => {
         }
 
         // 3️⃣ 📦 ระบบดึงรายการเบิกค้างคืน (Active Borrows)
+        // 3️⃣ 📦 ระบบดึงรายการเบิกค้างคืน (Active Borrows)
         const sheetTakeout = doc.sheetsByTitle['Log_Takeout'];
         let activeBorrowsMap = {};
 
@@ -268,11 +269,11 @@ app.get('/api/dashboard', async (req, res) => {
                 
                 if (status !== "" && !status.includes('คืนแล้ว')) {
                     const name = row.get('Staff') || 'ไม่ระบุ';
-                    const itemName = row.get('Item') || 'อุปกรณ์';
-                    const qty = parseInt(row.get('Amount')) || 0;
+                    // 🌟 เปลี่ยนชื่อให้ตรงกับคอลัมน์ใน Sheet ใหม่ที่พี่แคปรูปให้ผมครับ
+                    const itemName = row.get('Item_Name') || 'อุปกรณ์'; 
+                    const qty = parseInt(row.get('Amount_Taken')) || 0;  
                     const date = row.get('Timestamp') || '-';
-                    // เช็คหัวคอลัมน์ของสายด้วยนะครับว่าในชีทพี่เขียน Line หรือ Camp_Line
-                    const line = row.get('Line') || row.get('Camp_Line') || '-'; 
+                    const line = row.get('Camp_Line') || '-';          
 
                     if (!activeBorrowsMap[name]) {
                         activeBorrowsMap[name] = { name, date, line, items: {} };

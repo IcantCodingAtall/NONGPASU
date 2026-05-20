@@ -11,7 +11,7 @@
     
     <style>
         :root { --mu-blue: #00246B; --mu-gold: #F8B500; --bg-main: #F4F7FA; }
-        body { font-family: 'Kanit', sans-serif; background-color: var(--bg-main); color: #334155; padding-bottom: 90px; -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Kanit', sans-serif; background-color: var(--bg-main); color: #334155; padding-bottom: 100px; -webkit-tap-highlight-color: transparent; }
         
         /* Smooth View Transitions */
         .view-section { display: none; animation: fadeIn 0.3s ease; }
@@ -53,7 +53,6 @@
         window.onerror = function(msg, url, lineNo, columnNo, error) {
             const errStr = `❌ [Frontend Crash]\nMsg: ${msg}\nLine: ${lineNo}`;
             console.error(errStr);
-            // แจ้งเตือนเข้า LINE OA ผ่าน Backend
             fetch('/api/notify-error', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ message: errStr }) });
         };
         window.addEventListener('unhandledrejection', function(event) {
@@ -131,7 +130,7 @@
             </div>
             <div class="h-10"></div> </div>
 
-        <div id="view-inventory" class="view-section space-y-4">
+        <div id="view-inventory" class="view-section space-y-4 pb-32">
             <div class="mu-card space-y-3">
                 <h3 class="text-sm font-bold text-[#00246B]" id="invTitle">📤 ทำรายการอุปกรณ์</h3>
                 <div class="grid grid-cols-2 gap-2">
@@ -143,9 +142,9 @@
             <div id="invLoading" class="text-center text-xs font-bold text-[#00246B] py-10">กำลังโหลดคลัง...</div>
             <div id="invEmpty" class="text-center text-xs font-bold text-slate-400 py-10 hidden">ไม่มีข้อมูล</div>
             
-            <div id="invContainer" class="space-y-4 pb-20"></div>
+            <div id="invContainer" class="space-y-4"></div>
 
-            <div class="fixed bottom-[80px] left-0 right-0 px-4 z-40 pointer-events-none">
+            <div class="fixed bottom-24 left-0 right-0 px-4 z-40 pointer-events-none">
                 <div class="max-w-md mx-auto pointer-events-auto">
                     <button id="btnInvSubmit" onclick="showInvSummary()" class="mu-btn mu-btn-primary opacity-50 cursor-not-allowed" disabled>
                         ตรวจสอบรายการ (<span id="invCount">0</span>)
@@ -154,7 +153,7 @@
             </div>
         </div>
 
-        <div id="view-logbook" class="view-section space-y-4 pb-20">
+        <div id="view-logbook" class="view-section space-y-4 pb-32">
             
             <div class="mu-card border-l-4 border-l-[#00246B] space-y-3">
                 <h3 class="text-xs font-bold text-[#00246B]">👤 ข้อมูลฟาร์ม / เจ้าของ</h3>
@@ -198,7 +197,7 @@
                 <div id="lab-entries-container" class="space-y-3"></div>
             </div>
 
-            <div class="fixed bottom-[80px] left-0 right-0 px-4 z-40 pointer-events-none">
+            <div class="fixed bottom-24 left-0 right-0 px-4 z-40 pointer-events-none">
                 <div class="max-w-md mx-auto pointer-events-auto">
                     <button id="btnLogSubmit" onclick="showLogSummary()" class="mu-btn bg-[#00246B] text-white shadow-[0_4px_15px_rgba(0,36,107,0.3)] opacity-50 cursor-not-allowed" disabled>
                         📝 สรุป Logbook ฟาร์มนี้
@@ -290,7 +289,7 @@
                 loadInventory();
             } else if (target === 'logbook') {
                 document.getElementById('view-logbook').classList.add('active');
-                if(labCounter === 0) addLabEntry(); // Add first blank lab entry automatically
+                if(labCounter === 0) addLabEntry(); 
             }
             window.scrollTo(0,0);
         }
@@ -374,7 +373,6 @@
             document.getElementById('invEmpty').classList.add('hidden');
             document.getElementById('invContainer').innerHTML = '';
             
-            // Reset Date/Line fields if Takeout
             if(!isReturnMode) { document.getElementById('invDate').value = ""; document.getElementById('invLine').value = ""; document.getElementById('invDate').disabled = false; document.getElementById('invLine').disabled = false; }
 
             try {
@@ -548,7 +546,7 @@
                 html += `<div class="bg-red-50 p-3 rounded-lg border border-red-100"><h4 class="font-bold text-red-600 text-xs mb-1">🔬 สรุปผลแล็บ</h4><div class="text-[11px] text-slate-600">ส่งตรวจสัตว์ป่วยจำนวน: ${labCount} ตัว</div></div>`;
             }
 
-            if(html === "") html = '<div class="text-center text-red-500 font-bold text-xs">คุณยังไม่ได้กรอกข้อมูลใดๆ เลยครับ</div>';
+            if(html === "") html = `<div class="text-center text-red-500 font-bold text-xs">คุณยังไม่ได้กรอกข้อมูลใดๆ เลยครับ</div>`;
             document.getElementById('logSummaryBody').innerHTML = html;
             openModal('logSummaryModal');
         }
