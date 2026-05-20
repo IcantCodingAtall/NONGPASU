@@ -209,25 +209,24 @@ app.get('/api/dashboard', async (req, res) => {
         const procSheet = doc.sheetsByTitle['Log_Procedures'];
         const labSheet = doc.sheetsByTitle['Log_LabResults'];
         
+        // 🌟 เพิ่มหมวดหมู่หัตถการให้ครบตามที่หน้าเว็บใหม่ส่งมา
         let stats = {
             animals: { 'วัว': 0, 'ควาย': 0, 'แพะ': 0, 'แกะ': 0 },
-            procedures: { 'Blood': 0, 'Feces': 0, 'FMD': 0, 'LSD': 0, 'Ivermectin': 0, 'Albendazole': 0, 'Vitamin': 0 },
-            abnormalLabs: [] 
+            procedures: { 'FMD': 0, 'LSD': 0, 'EDTA_tube': 0, 'Clot_tube': 0, 'Ivermectin': 0, 'Albendazole': 0, 'Chloramine': 0, 'DexamVet': 0, 'VitaminB': 0 },
+            abnormalLabs: [],
+            activeBorrows: []
         };
 
-        // สกัดและรวบรวมข้อมูลตัวเลขจากแท็บหัตถการ
-        // ใน app.get('/api/dashboard' ...
-        // ตรงเงื่อนไข if (procSheet) { ... rows.forEach(r => { ... })
+        // 1️⃣ สกัดและรวบรวมข้อมูลตัวเลขจากแท็บหัตถการ
         if (procSheet) {
             const rows = await procSheet.getRows();
             rows.forEach(r => {
-                // รวมยอดสัตว์
                 stats.animals['วัว'] += parseInt(r.get('Cow') || 0);
                 stats.animals['ควาย'] += parseInt(r.get('Buffalo') || 0);
                 stats.animals['แพะ'] += parseInt(r.get('Goat') || 0);
                 stats.animals['แกะ'] += parseInt(r.get('Sheep') || 0);
                 
-                // รวมยอดหัตถการ (ดึงให้ตรงกับชื่อคอลัมน์ใหม่ใน Sheet)
+                // ดึงข้อมูลหัตถการให้ตรงกับหัวคอลัมน์ที่พี่สร้างใหม่ใน Google Sheet
                 stats.procedures['FMD'] += parseInt(r.get('FMD') || 0);
                 stats.procedures['LSD'] += parseInt(r.get('LSD') || 0);
                 stats.procedures['EDTA_tube'] += parseInt(r.get('EDTA_tube') || 0);
@@ -236,11 +235,11 @@ app.get('/api/dashboard', async (req, res) => {
                 stats.procedures['Albendazole'] += parseInt(r.get('Albendazole') || 0);
                 stats.procedures['Chloramine'] += parseInt(r.get('Chloramine') || 0);
                 stats.procedures['DexamVet'] += parseInt(r.get('DexamVet') || 0);
-                stats.procedures['VitaminB'] += parseInt(r.get('VitaminB') || parseInt(r.get('Vitamin') || 0)); 
+                stats.procedures['VitaminB'] += parseInt(r.get('VitaminB') || parseInt(r.get('Vitamin') || 0));
             });
         }
 
-        // สกัดข้อมูลเฉพาะสัตว์ป่วยที่มีผลแล็บติดสัญลักษณ์สีแดง 🔴 เพื่อนำมาทำตารางสรุปหน้าแรก
+        // 2️⃣ สกัดข้อมูลเฉพาะสัตว์ป่วยที่มีผลแล็บติดสัญลักษณ์สีแดง 🔴 
         if (labSheet) {
             const rows = await labSheet.getRows();
             const recentRows = rows.slice(-30).reverse(); // ดึงมาตรวจสอบ 30 แถวล่าสุดแบบย้อนกลับ
@@ -257,79 +256,53 @@ app.get('/api/dashboard', async (req, res) => {
                 }
             });
         }
-        // ==========================================
-            // ==========================================
-            // 📦 ระบบดึงรายการเบิกค้างคืน (ใช้ .get() เพื่อความแม่นยำ)
-            // ==========================================
-            const sheetTakeout = doc.sheetsByTitle['Log_Takeout'];
-            let activeBorrowsMap = {};
 
-            if (sheetTakeout) {
-                const rows = await sheetTakeout.getRows();
-                rows.forEach(row => {
-                    // ⚠️ เช็คหัวตารางให้ตรงกับใน Google Sheet ของพี่นะครับ (เช่น Status, Staff, Item, Amount)
-                    const status = (row.get('Status') || '').toString().trim();
-                    
-                    if (status !== "" && !status.includes('คืนแล้ว')) {
-                        const name = row.get('Staff') || 'ไม่ระบุ';
-                        const itemName = row.get('Item_Name') || 'อุปกรณ์';
-                        const qty = parseInt(row.get('Amount')) || 0;
-                        const date = row.get('Timestamp') || '-';
-                        const line = row.get('Line') || '-';
+        // 3️⃣ 📦 ระบบดึงรายการเบิกค้างคืน (Active Borrows)
+        const sheetTakeout = doc.sheetsByTitle['Log_Takeout'];
+        let activeBorrowsMap = {};
 
-                        // 🔍 บรรทัด Debug: ดูใน Render Logs ว่าค่าที่อ่านได้คืออะไร
-                        console.log(`[DEBUG] อ่านได้: ${name} | ของ: ${itemName} | จำนวน: ${qty}`);
+        if (sheetTakeout) {
+            const rows = await sheetTakeout.getRows();
+            rows.forEach(row => {
+                const status = (row.get('Status') || '').toString().trim();
+                
+                if (status !== "" && !status.includes('คืนแล้ว')) {
+                    const name = row.get('Staff') || 'ไม่ระบุ';
+                    const itemName = row.get('Item') || 'อุปกรณ์';
+                    const qty = parseInt(row.get('Amount')) || 0;
+                    const date = row.get('Timestamp') || '-';
+                    // เช็คหัวคอลัมน์ของสายด้วยนะครับว่าในชีทพี่เขียน Line หรือ Camp_Line
+                    const line = row.get('Line') || row.get('Camp_Line') || '-'; 
 
-                        if (!activeBorrowsMap[name]) {
-                            activeBorrowsMap[name] = { name, date, line, items: {} };
-                        }
-                        
-                        if (activeBorrowsMap[name].items[itemName]) {
-                            activeBorrowsMap[name].items[itemName].qty += qty;
-                        } else {
-                            activeBorrowsMap[name].items[itemName] = { name: itemName, qty: qty, unit: 'ชิ้น' };
-                        }
+                    if (!activeBorrowsMap[name]) {
+                        activeBorrowsMap[name] = { name, date, line, items: {} };
                     }
-                });
-            }
-            
-            // แปลงเป็น Array เพื่อส่งหน้าบ้าน
-            const activeBorrows = Object.values(activeBorrowsMap).map(p => ({
-                name: p.name,
-                date: p.date,
-                line: p.line,
-                items: Object.values(p.items),
-                totalQty: Object.values(p.items).reduce((a, b) => a + b.qty, 0)
-            }));
-
-            stats.activeBorrows = activeBorrows;
-            res.json(stats);
-            
-            // แปลงให้อยู่ในรูป Array ให้หน้าเว็บอ่านง่าย
-            stats.activeBorrows = Object.values(activeBorrowsMap).map(p => ({
-                ...p,
-                items: Object.values(p.items),
-                totalQty: Object.values(p.items).reduce((a, b) => a + b.qty, 0)
-            }));
-
-            // แปลงข้อมูลจากกล่อง (Object) ให้กลายเป็น Array เพื่อส่งให้หน้าเว็บ
-            const activeBorrows = Object.values(activeBorrowsMap).map(person => ({
-                name: person.name,
-                date: person.date,
-                line: person.line,
-                totalQty: person.totalQty,
-                items: Object.values(person.items) // แปลงรายการย่อยเป็น Array
-            })).filter(p => p.items.length > 0);
-
-            // ยัดใส่ stats ตัวเดิม
-            stats.activeBorrows = activeBorrows;
-            res.json(stats);
-
-            } catch (error) {
-            console.error("Error loading dashboard:", error);
-            res.status(500).json({ error: "เกิดข้อผิดพลาด" });
+                    
+                    if (activeBorrowsMap[name].items[itemName]) {
+                        activeBorrowsMap[name].items[itemName].qty += qty;
+                    } else {
+                        activeBorrowsMap[name].items[itemName] = { name: itemName, qty: qty, unit: 'ชิ้น' };
+                    }
+                }
+            });
         }
-    });
+        
+        // แปลงเป็น Array เพื่อส่งหน้าบ้าน (ประกาศตัวแปรแค่ครั้งเดียว ป้องกัน Error!)
+        stats.activeBorrows = Object.values(activeBorrowsMap).map(p => ({
+            name: p.name,
+            date: p.date,
+            line: p.line,
+            items: Object.values(p.items),
+            totalQty: Object.values(p.items).reduce((sum, item) => sum + item.qty, 0)
+        }));
+
+        res.json(stats);
+
+    } catch (error) {
+        console.error("Error loading dashboard:", error);
+        res.status(500).json({ error: "เกิดข้อผิดพลาด" });
+    }
+});
             // ==========================================
 
 // ============================================================================
