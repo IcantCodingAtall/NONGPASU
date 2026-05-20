@@ -216,21 +216,27 @@ app.get('/api/dashboard', async (req, res) => {
         };
 
         // สกัดและรวบรวมข้อมูลตัวเลขจากแท็บหัตถการ
+        // ใน app.get('/api/dashboard' ...
+        // ตรงเงื่อนไข if (procSheet) { ... rows.forEach(r => { ... })
         if (procSheet) {
             const rows = await procSheet.getRows();
             rows.forEach(r => {
+                // รวมยอดสัตว์
                 stats.animals['วัว'] += parseInt(r.get('Cow') || 0);
                 stats.animals['ควาย'] += parseInt(r.get('Buffalo') || 0);
                 stats.animals['แพะ'] += parseInt(r.get('Goat') || 0);
                 stats.animals['แกะ'] += parseInt(r.get('Sheep') || 0);
                 
-                stats.procedures['Blood'] += parseInt(r.get('Blood') || 0); 
-                stats.procedures['Feces'] += parseInt(r.get('Feces') || 0);
+                // รวมยอดหัตถการ (ดึงให้ตรงกับชื่อคอลัมน์ใหม่ใน Sheet)
                 stats.procedures['FMD'] += parseInt(r.get('FMD') || 0);
                 stats.procedures['LSD'] += parseInt(r.get('LSD') || 0);
+                stats.procedures['EDTA_tube'] += parseInt(r.get('EDTA_tube') || 0);
+                stats.procedures['Clot_tube'] += parseInt(r.get('Clot_tube') || 0);
                 stats.procedures['Ivermectin'] += parseInt(r.get('Ivermectin') || 0);
                 stats.procedures['Albendazole'] += parseInt(r.get('Albendazole') || 0);
-                stats.procedures['Vitamin'] += parseInt(r.get('Vitamin') || 0);
+                stats.procedures['Chloramine'] += parseInt(r.get('Chloramine') || 0);
+                stats.procedures['DexamVet'] += parseInt(r.get('DexamVet') || 0);
+                stats.procedures['VitaminB'] += parseInt(r.get('VitaminB') || parseInt(r.get('Vitamin') || 0)); 
             });
         }
 
@@ -252,32 +258,32 @@ app.get('/api/dashboard', async (req, res) => {
             });
         }
         // ==========================================
-            // 📦 ระบบดึงรายการเบิกค้างคืน (Active Borrows)
             // ==========================================
+            // 📦 ระบบดึงรายการเบิกค้างคืน (ใช้ .get() เพื่อความแม่นยำ)
             // ==========================================
-            // 📦 ระบบดึงรายการเบิกค้างคืน (รวมยอดคนเดียวกัน)
-            // ==========================================
-            // ดึงข้อมูลจาก Log_Takeout (Sheet ของพี่)
             const sheetTakeout = doc.sheetsByTitle['Log_Takeout'];
             let activeBorrowsMap = {};
 
             if (sheetTakeout) {
                 const rows = await sheetTakeout.getRows();
                 rows.forEach(row => {
-                    // Col F (Index 5) = Status
-                    const status = (row._rawData[5] || '').toString().trim();
+                    // ⚠️ เช็คหัวตารางให้ตรงกับใน Google Sheet ของพี่นะครับ (เช่น Status, Staff, Item, Amount)
+                    const status = (row.get('Status') || '').toString().trim();
+                    
                     if (status !== "" && !status.includes('คืนแล้ว')) {
-                        // Col B(1)=Staff, C(2)=Item, D(3)=Amount, G(6)=Date, H(7)=Line
-                        const name = row._rawData[1] || 'ไม่ระบุ';
-                        const itemName = row._rawData[2] || 'อุปกรณ์';
-                        const qty = parseInt(row._rawData[3]) || 0;
-                        const date = row._rawData[6] || '-';
-                        const line = row._rawData[7] || '-';
+                        const name = row.get('Staff') || 'ไม่ระบุ';
+                        const itemName = row.get('Item_Name') || 'อุปกรณ์';
+                        const qty = parseInt(row.get('Amount')) || 0;
+                        const date = row.get('Timestamp') || '-';
+                        const line = row.get('Line') || '-';
+
+                        // 🔍 บรรทัด Debug: ดูใน Render Logs ว่าค่าที่อ่านได้คืออะไร
+                        console.log(`[DEBUG] อ่านได้: ${name} | ของ: ${itemName} | จำนวน: ${qty}`);
 
                         if (!activeBorrowsMap[name]) {
                             activeBorrowsMap[name] = { name, date, line, items: {} };
                         }
-                        // รวมยอดถ้าชื่ออุปกรณ์ซ้ำกันในคนเดียว
+                        
                         if (activeBorrowsMap[name].items[itemName]) {
                             activeBorrowsMap[name].items[itemName].qty += qty;
                         } else {
@@ -286,6 +292,18 @@ app.get('/api/dashboard', async (req, res) => {
                     }
                 });
             }
+            
+            // แปลงเป็น Array เพื่อส่งหน้าบ้าน
+            const activeBorrows = Object.values(activeBorrowsMap).map(p => ({
+                name: p.name,
+                date: p.date,
+                line: p.line,
+                items: Object.values(p.items),
+                totalQty: Object.values(p.items).reduce((a, b) => a + b.qty, 0)
+            }));
+
+            stats.activeBorrows = activeBorrows;
+            res.json(stats);
             
             // แปลงให้อยู่ในรูป Array ให้หน้าเว็บอ่านง่าย
             stats.activeBorrows = Object.values(activeBorrowsMap).map(p => ({
@@ -332,12 +350,31 @@ app.post('/api/liff/procedure', async (req, res) => {
         const speciesBreakdown = `วัว:${d.cows||0}, ควาย:${d.buffs||0}, แพะ:${d.goats||0}, แกะ:${d.sheeps||0}`;
 
         // บันทึกข้อมูลลง Google Sheets
+        // ใน app.post('/api/liff/procedure' ...
         await procSheet.addRow({
-            Timestamp: new Date().toLocaleString('th-TH'), LINE_ID: d.lineId, Staff: d.staffName,
-            Date: d.date, Line: d.line, Owner_Name: d.ownerName, Owner_Phone: d.ownerPhone, Owner_Address: d.ownerAddress,
-            Cow: d.cows || 0, Buffalo: d.buffs || 0, Goat: d.goats || 0, Sheep: d.sheeps || 0,
-            Blood: d.blood || 0, Feces: d.feces || 0, FMD: d.fmd || 0, LSD: d.lsd || 0,
-            Ivermectin: d.iver || 0, Albendazole: d.alben || 0, Vitamin: d.vitamin || 0, Others: d.others || '-'
+            'Timestamp': new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }),
+            'LINE_ID': req.body.lineId,
+            'Staff': req.body.staffName,
+            'Date': req.body.date,
+            'Line': req.body.line,
+            'Owner_Name': req.body.ownerName,
+            'Owner_Phone': req.body.ownerPhone,
+            'Address': req.body.ownerAddress,
+            // จำนวนสัตว์
+            'Cow': req.body.cows,
+            'Buffalo': req.body.buffs,
+            'Goat': req.body.goats,
+            'Sheep': req.body.sheeps,
+            // หัตถการและเวชภัณฑ์ (อัปเดตให้ครบตามหน้าเว็บใหม่)
+            'FMD': req.body.fmd,
+            'LSD': req.body.lsd,
+            'EDTA_tube': req.body.edta,
+            'Clot_tube': req.body.clot,
+            'Ivermectin': req.body.iver,
+            'Albendazole': req.body.alben,
+            'Chloramine': req.body.chloro,
+            'DexamVet': req.body.dexam,
+            'VitaminB': req.body.vitb
         });
 
         // จัดรูปแบบหน้าตา Flex Message
