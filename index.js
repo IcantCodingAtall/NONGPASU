@@ -218,24 +218,25 @@ app.get('/api/dashboard', async (req, res) => {
         };
 
         // 1️⃣ สกัดและรวบรวมข้อมูลตัวเลขจากแท็บหัตถการ
+        // ใน app.get('/api/dashboard' ...
         if (procSheet) {
             const rows = await procSheet.getRows();
             rows.forEach(r => {
-                stats.animals['วัว'] += parseInt(r.get('Cow') || 0);
-                stats.animals['ควาย'] += parseInt(r.get('Buffalo') || 0);
-                stats.animals['แพะ'] += parseInt(r.get('Goat') || 0);
-                stats.animals['แกะ'] += parseInt(r.get('Sheep') || 0);
+                // 🌟 ย้ายวงเล็บมาครอบ parseInt เพื่อป้องกันการอ่านเจอช่องว่าง (" ") แล้วพังกลายเป็น 0 ทั้งกระดานครับ
+                stats.animals['วัว'] += (parseInt(r.get('Cow')) || 0);
+                stats.animals['ควาย'] += (parseInt(r.get('Buffalo')) || 0);
+                stats.animals['แพะ'] += (parseInt(r.get('Goat')) || 0);
+                stats.animals['แกะ'] += (parseInt(r.get('Sheep')) || 0);
                 
-                // ดึงข้อมูลหัตถการให้ตรงกับหัวคอลัมน์ที่พี่สร้างใหม่ใน Google Sheet
-                stats.procedures['FMD'] += parseInt(r.get('FMD') || 0);
-                stats.procedures['LSD'] += parseInt(r.get('LSD') || 0);
-                stats.procedures['EDTA_tube'] += parseInt(r.get('EDTA_tube') || 0);
-                stats.procedures['Clot_tube'] += parseInt(r.get('Clot_tube') || 0);
-                stats.procedures['Ivermectin'] += parseInt(r.get('Ivermectin') || 0);
-                stats.procedures['Albendazole'] += parseInt(r.get('Albendazole') || 0);
-                stats.procedures['Chloramine'] += parseInt(r.get('Chloramine') || 0);
-                stats.procedures['DexamVet'] += parseInt(r.get('DexamVet') || 0);
-                stats.procedures['VitaminB'] += parseInt(r.get('VitaminB') || parseInt(r.get('Vitamin') || 0));
+                stats.procedures['FMD'] += (parseInt(r.get('FMD')) || 0);
+                stats.procedures['LSD'] += (parseInt(r.get('LSD')) || 0);
+                stats.procedures['EDTA_tube'] += (parseInt(r.get('EDTA_tube')) || 0);
+                stats.procedures['Clot_tube'] += (parseInt(r.get('Clot_tube')) || 0);
+                stats.procedures['Ivermectin'] += (parseInt(r.get('Ivermectin')) || 0);
+                stats.procedures['Albendazole'] += (parseInt(r.get('Albendazole')) || 0);
+                stats.procedures['Chloramine'] += (parseInt(r.get('Chloramine')) || 0);
+                stats.procedures['DexamVet'] += (parseInt(r.get('DexamVet')) || 0);
+                stats.procedures['VitaminB'] += (parseInt(r.get('VitaminB')) || parseInt(r.get('Vitamin')) || 0); 
             });
         }
 

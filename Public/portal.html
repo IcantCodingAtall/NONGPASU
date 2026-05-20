@@ -599,9 +599,45 @@
             } catch(e) {}
             document.getElementById('staff-name-display').innerHTML = `👤 หมอ${staffName}`;
             fetchDashboard();
+            
+            // 🌟 สั่งให้ระบบ Live ทำงานทุกๆ 5 วินาที
+            sendPresenceHeartbeat();
+            setInterval(sendPresenceHeartbeat, 5000);
         }
         
         window.addEventListener('DOMContentLoaded', initApp);
+        // -----------------------------------------
+        // Live Dashboard (ระบบเช็คคนออนไลน์)
+        // -----------------------------------------
+        async function sendPresenceHeartbeat() {
+            try {
+                let currentStatus = "กำลังดูแดชบอร์ด 📊";
+                if (document.getElementById('view-inventory').classList.contains('active')) {
+                    currentStatus = isReturnMode ? "กำลังทำรายการคืนของ 📥" : "กำลังทำรายการเบิกของ 📤";
+                } else if (document.getElementById('view-logbook').classList.contains('active')) {
+                    currentStatus = "กำลังคีย์ Logbook 📝";
+                }
+                
+                const res = await fetch('/api/presence', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ lineId: myLineId, name: staffName, status: currentStatus }) 
+                });
+                const activeUsersList = await res.json(); 
+                const usersContainer = document.getElementById('dash-active-users');
+                
+                if (activeUsersList && activeUsersList.length > 0) {
+                    usersContainer.innerHTML = activeUsersList.map(u => `
+                        <div class="flex items-center justify-between w-full p-2 bg-slate-50 rounded-lg border border-slate-100 shadow-sm mb-1">
+                            <span class="font-bold text-slate-700 text-xs"><i class="fa-solid fa-user-doctor text-[#00246B] mr-1"></i> หมอ${u.name}</span>
+                            <span class="text-[9px] bg-blue-100 text-[#00246B] px-2 py-0.5 rounded-full font-bold">${u.status || 'ออนไลน์'}</span>
+                        </div>
+                    `).join('');
+                } else { 
+                    usersContainer.innerHTML = `<span class="text-[10px] text-slate-400 italic">ไม่มีผู้ใช้งานอื่นแสตนบายอยู่</span>`; 
+                }
+            } catch (e) { console.error("Presence Error:", e); }
+        }
     </script>
 </body>
 </html>
