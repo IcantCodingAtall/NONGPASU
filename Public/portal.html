@@ -71,6 +71,33 @@
     </div>
 
     <div class="max-w-md mx-auto w-full p-4">
+        <div id="view-register" class="view-section space-y-6 pt-6">
+            <div class="text-center space-y-2">
+                <span class="text-5xl">🔑</span>
+                <h2 class="text-lg font-bold text-[#00246B]">ลงทะเบียนเข้าสายปฏิบัติการ</h2>
+                <p class="text-xs text-slate-400">กรุณายืนยันตัวตนด้วยรหัสนักศึกษาและวันที่ออกสายของท่าน</p>
+            </div>
+            
+            <div class="mu-card space-y-4 shadow-md">
+                <div>
+                    <label class="text-xs font-bold text-[#00246B] block mb-1">รหัสนักศึกษา</label>
+                    <input type="text" id="regStudentId" class="mu-input" placeholder="ระบุรหัสนักศึกษา เช่น 6616xxx">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-[#00246B] block mb-1">วันที่ออกสายปฏิบัติการ</label>
+                    <select id="regDate" class="mu-input">
+                        <option value="">-- เลือกวันที่ออกสาย --</option>
+                        <option value="25 พฤษภาคม">25 พฤษภาคม</option>
+                        <option value="26 พฤษภาคม">26 พฤษภาคม</option>
+                        <option value="27 พฤษภาคม">27 พฤษภาคม</option>
+                    </select>
+                </div>
+                
+                <button onclick="submitRegistrationFromLiff()" class="mu-btn mu-btn-primary mt-2">
+                    🚀 ลงทะเบียนเข้าสู่ระบบ
+                </button>
+            </div>
+        </div>
 
         <div id="view-dashboard" class="view-section active space-y-4">
             
@@ -590,21 +617,96 @@
         // -----------------------------------------
         // Initialization
         // -----------------------------------------
+        // -----------------------------------------
+        // Initialization & Permission Control (New LIFF Reg Flow)
+        // -----------------------------------------
+        let userProfile = null;
+
+        // ฟังก์ชันเปิด-ปิดแถบเมนูด้านล่าง
+        function toggleBottomNav(show) {
+            const nav = document.querySelector('.bottom-nav');
+            if(nav) nav.style.display = show ? 'flex' : 'none';
+        }
+
+        async function fetchUserProfile() {
+            try {
+                const res = await fetch(`/api/user-profile?lineId=${myLineId}`);
+                const data = await res.json();
+                
+                if (data.success) {
+                    userProfile = data.profile;
+                    staffName = `${userProfile.nickname} ${userProfile.year}`;
+                    
+                    // อัปเดตป้ายชื่อ
+                    document.getElementById('staff-name-display').innerHTML = 
+                        `👤 หมอ${staffName} <span class="bg-[#F8B500] text-[#00246B] px-1.5 py-0.5 rounded text-[9px] ml-1 font-bold shadow-sm">${userProfile.assignedLine}</span>`;
+                    
+                    // ล็อกช่องล็อกสายและวันที่ของฟอร์มต่างๆ
+                    const lockFields = ['invDate', 'invLine', 'logDate', 'logLine'];
+                    lockFields.forEach(id => {
+                        const el = document.getElementById(id);
+                        if(el) {
+                            el.innerHTML = `<option value="${id.includes('Date') ? userProfile.campDate : userProfile.assignedLine}">${id.includes('Date') ? userProfile.campDate : userProfile.assignedLine}</option>`;
+                            el.disabled = true;
+                        }
+                    });
+                    
+                    // เปิดเมนูและพาเข้าหน้า Dashboard
+                    toggleBottomNav(true);
+                    switchNav('dashboard', document.querySelector('.nav-item'));
+                    
+                } else {
+                    // ❌ ถ้ายังไม่ได้ลงทะเบียนสาย บังคับให้อยู่หน้าลงทะเบียน และซ่อนเมนูล่างทิ้ง
+                    document.getElementById('staff-name-display').innerHTML = `👤 ผู้ใช้งานทั่วไป (โปรดลงทะเบียน)`;
+                    toggleBottomNav(false);
+                    document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
+                    document.getElementById('view-register').classList.add('active');
+                }
+            } catch (error) { console.error("Profile Fetch Error:", error); }
+        }
+
+        // ฟังก์ชันกดส่งข้อมูลลงทะเบียนจากหน้า LIFF
+        async function submitRegistrationFromLiff() {
+            const studentId = document.getElementById('regStudentId').value.trim();
+            const dateStr = document.getElementById('regDate').value;
+            
+            if(!studentId || !dateStr) return alert("⚠️ กรุณากรอกรหัสนักศึกษาและเลือกวันที่ให้ครบถ้วนครับ");
+            
+            try {
+                const res = await fetch('/api/register-user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lineId: myLineId, studentId, dateStr })
+                });
+                const data = await res.json();
+                
+                if(data.success) {
+                    alert(`✅ ลงทะเบียนสำเร็จ!\nยินดีต้อนรับ หมอ${data.profile.nickname} เข้าสู่ระบบสายปฏิบัติการครับ`);
+                    await fetchUserProfile(); // รีโหลดโปรไฟล์เพื่อปลดล็อกหน้าเว็บเข้าแดชบอร์ด
+                } else {
+                    alert(data.message); // พ่นแจ้งเตือนกรณีหาไม่เจอ หรือพี่เอิร์ทยังไม่เปิดระบบ
+                }
+            } catch(e) {
+                alert("❌ ระบบเชื่อมต่อฐานข้อมูลขัดข้อง");
+            }
+        }
+
         async function initApp() {
             try {
                 await liff.init({ liffId: "2010125977-E8l1g7Zp" });
                 if(liff.isLoggedIn() || liff.isInClient()) {
-                    const profile = await liff.getProfile(); myLineId = profile.userId; staffName = profile.displayName;
+                    const profile = await liff.getProfile(); 
+                    myLineId = profile.userId; 
+                    staffName = profile.displayName;
                 }
             } catch(e) {}
-            document.getElementById('staff-name-display').innerHTML = `👤 หมอ${staffName}`;
-            fetchDashboard();
-            
+            // เช็คสิทธิ์พนักงานทันทีก่อนเริ่มงาน
+            await fetchUserProfile();
             // 🌟 สั่งให้ระบบ Live ทำงานทุกๆ 5 วินาที
             sendPresenceHeartbeat();
             setInterval(sendPresenceHeartbeat, 5000);
         }
-        
+      
         window.addEventListener('DOMContentLoaded', initApp);
         // -----------------------------------------
         // Live Dashboard (ระบบเช็คคนออนไลน์)

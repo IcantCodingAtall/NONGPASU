@@ -1053,6 +1053,62 @@ app.post('/webhook', express.json(), async (req, res) => {
         res.status(500).send('Error');
     }
 });
+// ==========================================
+// 🔑 API รับเรื่องลงทะเบียนสายตรงจากหน้า LIFF
+// ==========================================
+app.post('/api/register-user', express.json(), async (req, res) => {
+    try {
+        const { lineId, studentId, dateStr } = req.body;
+        
+        if (!lineId || !studentId || !dateStr) {
+            return res.status(400).json({ success: false, message: "ข้อมูลส่งมาไม่ครบถ้วน" });
+        }
+
+        const doc = await getSheetDoc();
+        const sheet = doc.sheetsByTitle['Master_Data'];
+        if (!sheet) return res.status(500).json({ success: false, message: "ระบบหลังบ้านขัดข้อง (ไม่พบแท็บข้อมูล)" });
+
+        const rows = await sheet.getRows();
+        let foundUser = null;
+
+        // วิ่งหาเด็กจาก รหัสนักศึกษา และ วันที่
+        for (let row of rows) {
+            if (row.get('Student_ID') === studentId && row.get('Camp_Date').includes(dateStr)) {
+                foundUser = row;
+                break;
+            }
+        }
+
+        // เงื่อนไขที่ 1: ตรวจไม่เจอประวัติในค่ายประจำวันนั้น
+        if (!foundUser) {
+            return res.json({ success: false, message: `❌ ไม่พบประวัติการออกสายในวันที่ ${dateStr} หรือรหัสนักศึกษาไม่ถูกต้อง (ห้ามแอบสุ่มตรวจน้า!)` });
+        }
+
+        // เงื่อนไขที่ 2: ตรวจเจอชื่อ แต่พี่เอิร์ทยังไม่ได้ปรับในชีทเป็นคำว่า "เปิด" (ยังไม่ถึงเวลาปล่อยสาย)
+        if (foundUser.get('Reg_Status') !== 'เปิด') {
+            return res.json({ success: false, message: `⏳ ขออภัยครับ ระบบลงทะเบียนสำหรับสายของวันที่ ${dateStr} ยังไม่เปิดใช้งานในขณะนี้` });
+        }
+
+        // ผ่านทุกด่าน -> ทำการผูก LINE UID ลงช่อง Google Sheet ของคนๆ นั้นทันที
+        foundUser.assign({ 'LINE_UID': lineId });
+        await foundUser.save();
+
+        res.json({
+            success: true,
+            profile: {
+                nickname: foundUser.get('Nickname'),
+                year: foundUser.get('Year'),
+                campDate: foundUser.get('Camp_Date'),
+                assignedLine: foundUser.get('Assigned_Line'),
+                role: foundUser.get('Role')
+            }
+        });
+
+    } catch (error) {
+        console.error("LIFF Registration Error:", error);
+        res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดของเซิร์ฟเวอร์" });
+    }
+});
 app.listen(port, () => { 
     console.log(`🚀 บอท MU VET PORTAL รันระบบสมบูรณ์แบบไร้ที่ติ 100% บน Port ${port}`); 
 });
