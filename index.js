@@ -1109,6 +1109,54 @@ app.post('/api/register-user', express.json(), async (req, res) => {
         res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดของเซิร์ฟเวอร์" });
     }
 });
+// ==========================================
+// 🔐 API เช็คสิทธิ์ผู้ใช้งาน (ดึงข้อมูลตอนเปิด LIFF)
+// ==========================================
+app.get('/api/user-profile', async (req, res) => {
+    try {
+        const lineId = req.query.lineId;
+        if (!lineId) {
+            return res.status(400).json({ success: false, message: "No Line ID provided" });
+        }
+
+        // เชื่อมต่อ Google Sheet
+        const doc = await getSheetDoc();
+        const sheet = doc.sheetsByTitle['Master_Data'];
+        
+        if (!sheet) {
+            console.error("❌ หาแท็บ Master_Data ไม่เจอใน Google Sheet โปรดเช็คชื่อแท็บอีกครั้ง");
+            return res.status(500).json({ success: false, message: "System Error: No Master_Data sheet" });
+        }
+
+        const rows = await sheet.getRows();
+        let userProfile = null;
+
+        // ค้นหาจาก LINE_UID ที่อาจจะเคยผูกไว้แล้ว
+        for (let row of rows) {
+            if (row.get('LINE_UID') === lineId) {
+                userProfile = {
+                    nickname: row.get('Nickname'),
+                    year: row.get('Year'),
+                    campDate: row.get('Camp_Date'),
+                    assignedLine: row.get('Assigned_Line'),
+                    role: row.get('Role')
+                };
+                break; // เจอแล้วหยุดหา
+            }
+        }
+
+        if (userProfile) {
+            // กรณีที่ 1: เคยลงทะเบียนแล้ว (มี LINE_UID ตรงกัน)
+            res.json({ success: true, profile: userProfile });
+        } else {
+            // กรณีที่ 2: ยังไม่เคยลงทะเบียน หรือหาไม่เจอ
+            res.json({ success: false, message: "ยังไม่ได้ลงทะเบียน" });
+        }
+    } catch (error) {
+        console.error("🚨 Profile Fetch Error:", error);
+        res.status(500).json({ success: false, message: "Server Error" });
+    }
+});
 app.listen(port, () => { 
     console.log(`🚀 บอท MU VET PORTAL รันระบบสมบูรณ์แบบไร้ที่ติ 100% บน Port ${port}`); 
 });
