@@ -9,9 +9,11 @@ const fs = require('fs');
 
 // 🌟 เติมบรรทัดนี้กลับเข้าไปครับ! เพื่อให้ระบบรู้จักคำว่า 'line'
 const line = require('@line/bot-sdk');
-const client = new line.Client({
-    channelAccessToken: process.env.LINE_ACCESS_TOKEN
-});
+const clientConfig = {
+    // ใส่ Token ของพี่เอิร์ทตรงนี้ (หรือถ้าใช้ process.env ก็ใส่ process.env.CHANNEL_ACCESS_TOKEN)
+    channelAccessToken: process.env.LINE_ACCESS_TOKEN 
+};
+const client = new line.messagingApi.MessagingApiClient(clientConfig);
 const app = express();
 
 // ... โค้ดส่วนอื่นๆ ที่เราทำไว้ ...
@@ -964,11 +966,14 @@ app.post('/webhook', express.json(), async (req, res) => {
                         }
                     }
 
-                    // ❌ กรณีที่ 1: หาชื่อไม่เจอ หรือพิมพ์วันผิด
+                   // ❌ กรณีที่ 1: หาชื่อไม่เจอ หรือพิมพ์วันผิด
                     if (!foundUser) {
-                        await client.replyMessage(event.replyToken, { 
-                            type: 'text', 
-                            text: `❌ ไม่พบข้อมูลการออกสายในวันที่ "${dateStr}" หรือรหัสนักศึกษาไม่ถูกต้องครับ\n\n💡 ตัวอย่างการพิมพ์: #ลงทะเบียน 64xxxxx 25` 
+                        await client.replyMessage({
+                            replyToken: event.replyToken,
+                            messages: [{ 
+                                type: 'text', 
+                                text: `❌ ไม่พบข้อมูลการออกสายในวันที่ "${dateStr}" หรือรหัสนักศึกษาไม่ถูกต้องครับ\n\n💡 ตัวอย่างการพิมพ์: #ลงทะเบียน 64xxxxx 25` 
+                            }]
                         });
                         continue;
                     }
@@ -977,9 +982,12 @@ app.post('/webhook', express.json(), async (req, res) => {
                     
                     // ❌ กรณีที่ 2: พี่เอิร์ทยังไม่เปิดระบบ (สวิตช์ปิดอยู่)
                     if (status !== 'เปิด') {
-                        await client.replyMessage(event.replyToken, { 
-                            type: 'text', 
-                            text: `⏳ ระบบยังไม่เปิดให้ลงทะเบียนสายของวันที่ ${dateStr} ครับ รอก่อนน้า!` 
+                        await client.replyMessage({
+                            replyToken: event.replyToken,
+                            messages: [{ 
+                                type: 'text', 
+                                text: `⏳ ระบบยังไม่เปิดให้ลงทะเบียนสายของวันที่ ${dateStr} ครับ รอก่อนน้า!` 
+                            }]
                         });
                         continue;
                     }
