@@ -925,12 +925,12 @@ await client.pushMessage({
 // ==========================================
 // 🤖 LINE Webhook: ระบบลงทะเบียนสายปฏิบัติการ
 // ==========================================
+// ==========================================
+// 🤖 LINE Webhook: ระบบลงทะเบียนสายปฏิบัติการ
+// ==========================================
 app.post('/webhook', express.json(), async (req, res) => {
     try {
-        console.log("🔔 มีคนทักบอทมา! ข้อมูลที่ได้:", JSON.stringify(req.body.events));
-        
         const events = req.body.events;
-        // ถ้า LINE ยิงมาเช็คสถานะเฉยๆ ให้ตอบ OK กลับไป
         if (!events || events.length === 0) return res.status(200).send('OK');
 
         for (const event of events) {
@@ -938,27 +938,29 @@ app.post('/webhook', express.json(), async (req, res) => {
                 const text = event.message.text.trim();
                 const userId = event.source.userId;
 
-                // 🌟 ตรวจจับ Format: #ลงทะเบียน [รหัส] [วันที่] (เช่น #ลงทะเบียน 6410001 25)
+                console.log(`\n--- 🕵️‍♂️ เริ่มการทำงาน ---`);
+                console.log(`👉 1. ข้อความที่พิมพ์เข้ามาคือ: "${text}"`);
+
                 const regRegex = /^#ลงทะเบียน\s+(\d+)\s+(.+)$/;
                 const match = text.match(regRegex);
 
                 if (match) {
                     const studentId = match[1];
                     const dateStr = match[2].trim();
+                    console.log(`👉 2. Regex ถูกต้อง! รหัส: ${studentId}, วันที่: ${dateStr}`);
 
-                    // ดึงข้อมูลจาก Sheet Master_Data
                     const doc = await getSheetDoc();
                     const sheet = doc.sheetsByTitle['Master_Data'];
                     
                     if (!sheet) {
-                        console.error("ไม่พบแท็บ Master_Data");
+                        console.error("❌ หาแท็บ Master_Data ใน Google Sheet ไม่เจอ!");
                         continue;
                     }
+                    console.log(`👉 3. เชื่อมต่อ Sheet สำเร็จ กำลังค้นหาข้อมูล...`);
 
                     const rows = await sheet.getRows();
                     let foundUser = null;
 
-                    // ค้นหาเด็กจาก รหัสนักศึกษา และ วันที่
                     for (let row of rows) {
                         if (row.get('Student_ID') === studentId && row.get('Camp_Date').includes(dateStr)) {
                             foundUser = row;
@@ -966,60 +968,52 @@ app.post('/webhook', express.json(), async (req, res) => {
                         }
                     }
 
-                   // ❌ กรณีที่ 1: หาชื่อไม่เจอ หรือพิมพ์วันผิด
                     if (!foundUser) {
+                        console.log(`❌ 4. หาเด็กไม่เจอ (รหัสหรือวันไม่ตรงใน Sheet)`);
                         await client.replyMessage({
                             replyToken: event.replyToken,
-                            messages: [{ 
-                                type: 'text', 
-                                text: `❌ ไม่พบข้อมูลการออกสายในวันที่ "${dateStr}" หรือรหัสนักศึกษาไม่ถูกต้องครับ\n\n💡 ตัวอย่างการพิมพ์: #ลงทะเบียน 64xxxxx 25` 
-                            }]
+                            messages: [{ type: 'text', text: `❌ ไม่พบข้อมูลการออกสายในวันที่ "${dateStr}" หรือรหัสนักศึกษาไม่ถูกต้องครับ` }]
                         });
                         continue;
                     }
 
                     const status = foundUser.get('Reg_Status');
+                    console.log(`👉 5. เจอข้อมูลเด็กแล้ว! สถานะระบบคือ: ${status}`);
                     
-                    // ❌ กรณีที่ 2: พี่เอิร์ทยังไม่เปิดระบบ (สวิตช์ปิดอยู่)
                     if (status !== 'เปิด') {
+                        console.log(`❌ 6. ระบบปิดอยู่ บังคับหยุด`);
                         await client.replyMessage({
                             replyToken: event.replyToken,
-                            messages: [{ 
-                                type: 'text', 
-                                text: `⏳ ระบบยังไม่เปิดให้ลงทะเบียนสายของวันที่ ${dateStr} ครับ รอก่อนน้า!` 
-                            }]
+                            messages: [{ type: 'text', text: `⏳ ระบบยังไม่เปิดให้ลงทะเบียนสายของวันที่ ${dateStr} ครับ รอก่อนน้า!` }]
                         });
                         continue;
                     }
 
-                    // ✅ กรณีสำเร็จ: บันทึก LINE_UID ลง Sheet เพื่อผูกบัญชี
                     foundUser.assign({ 'LINE_UID': userId });
                     await foundUser.save();
+                    console.log(`👉 7. บันทึก LINE_UID ลง Sheet สำเร็จ`);
 
-                    // ดึงข้อมูลมาทำ Flex Message
                     const nickname = foundUser.get('Nickname');
                     const year = foundUser.get('Year');
                     const lineName = foundUser.get('Assigned_Line');
                     const role = foundUser.get('Role');
 
-                    // 🌟 สร้าง Flex Message ต้อนรับ
+                    console.log(`👉 8. กำลังจะส่ง Flex Message ให้ หมอ${nickname}...`);
+                    
                     const flexMsg = {
                         type: "flex",
                         altText: `ยินดีต้อนรับเข้าสู่ ${lineName}`,
                         contents: {
                             type: "bubble",
                             header: {
-                                type: "box",
-                                layout: "vertical",
-                                backgroundColor: "#00246B",
+                                type: "box", layout: "vertical", backgroundColor: "#00246B",
                                 contents: [
                                     { type: "text", text: "🤝 MU VET TEAM", color: "#F8B500", weight: "bold", size: "sm" },
                                     { type: "text", text: `ยินดีต้อนรับสู่ ${lineName}`, color: "#FFFFFF", weight: "bold", size: "xl", margin: "md" }
                                 ]
                             },
                             body: {
-                                type: "box",
-                                layout: "vertical",
+                                type: "box", layout: "vertical",
                                 contents: [
                                     { type: "text", text: `สวัสดี หมอ${nickname} ${year}`, weight: "bold", size: "md", color: "#334155" },
                                     { type: "text", text: `📅 ประจำวันที่: ${foundUser.get('Camp_Date')}`, size: "sm", color: "#64748b", margin: "sm" },
@@ -1029,36 +1023,31 @@ app.post('/webhook', express.json(), async (req, res) => {
                                 ]
                             },
                             footer: {
-                                type: "box",
-                                layout: "vertical",
+                                type: "box", layout: "vertical",
                                 contents: [
                                     {
-                                        type: "button",
-                                        style: "primary",
-                                        color: "#F8B500",
-                                        action: {
-                                            type: "uri",
-                                            label: "🎯 เปิดหน้าปฏิบัติงาน",
-                                            // LIFF URL ของพี่เอิร์ท
-                                            uri: "https://liff.line.me/2010125977-E8l1g7Zp" 
-                                        }
+                                        type: "button", style: "primary", color: "#F8B500",
+                                        action: { type: "uri", label: "🎯 เปิดหน้าปฏิบัติงาน", uri: "https://liff.line.me/2010125977-E8l1g7Zp" }
                                     }
                                 ]
                             }
                         }
                     };
 
-                   await client.replyMessage({
-                    replyToken: event.replyToken,
-                    messages: [flexMsg]
-});
-                    console.log(`✅ ${nickname} ลงทะเบียน ${lineName} สำเร็จ`);
+                    await client.replyMessage({
+                        replyToken: event.replyToken,
+                        messages: [flexMsg]
+                    });
+                    console.log(`✅ 9. ส่ง Flex Message เสร็จสมบูรณ์! จบกระบวนการ!`);
+
+                } else {
+                    console.log(`❌ รูปแบบที่พิมพ์มาไม่ตรงเงื่อนไข (#ลงทะเบียน รหัส วันที่)`);
                 }
             }
         }
         res.status(200).send('OK');
     } catch (e) {
-        console.error("Webhook Error:", e);
+        console.error("🚨 Webhook Error เต็มๆ:", e);
         res.status(500).send('Error');
     }
 });
