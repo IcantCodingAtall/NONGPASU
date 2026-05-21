@@ -630,6 +630,12 @@
 
         async function fetchUserProfile() {
             try {
+                // 🚨 เช็คว่า LIFF ส่ง Line ID มาให้เราหรือยัง
+                if (!myLineId) {
+                    alert("⚠️ ไม่พบ LINE ID ของคุณ กรุณาเปิดผ่านแอป LINE ครับ");
+                    return;
+                }
+
                 const res = await fetch(`/api/user-profile?lineId=${myLineId}`);
                 const data = await res.json();
                 
@@ -637,11 +643,9 @@
                     userProfile = data.profile;
                     staffName = `${userProfile.nickname} ${userProfile.year}`;
                     
-                    // อัปเดตป้ายชื่อ
                     document.getElementById('staff-name-display').innerHTML = 
                         `👤 หมอ${staffName} <span class="bg-[#F8B500] text-[#00246B] px-1.5 py-0.5 rounded text-[9px] ml-1 font-bold shadow-sm">${userProfile.assignedLine}</span>`;
                     
-                    // ล็อกช่องล็อกสายและวันที่ของฟอร์มต่างๆ
                     const lockFields = ['invDate', 'invLine', 'logDate', 'logLine'];
                     lockFields.forEach(id => {
                         const el = document.getElementById(id);
@@ -651,18 +655,29 @@
                         }
                     });
                     
-                    // เปิดเมนูและพาเข้าหน้า Dashboard
                     toggleBottomNav(true);
                     switchNav('dashboard', document.querySelector('.nav-item'));
                     
                 } else {
-                    // ❌ ถ้ายังไม่ได้ลงทะเบียนสาย บังคับให้อยู่หน้าลงทะเบียน และซ่อนเมนูล่างทิ้ง
+                    // 🚨 เพิ่ม Alert ตรงนี้ เพื่อยืนยันว่ามันวิ่งมาถูกทางแล้ว!
+                    alert("🔍 ระบบไม่พบประวัติของคุณ! กำลังพาไปหน้าลงทะเบียน...");
+
                     document.getElementById('staff-name-display').innerHTML = `👤 ผู้ใช้งานทั่วไป (โปรดลงทะเบียน)`;
                     toggleBottomNav(false);
                     document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
-                    document.getElementById('view-register').classList.add('active');
+                    
+                    // สั่งให้หน้าลงทะเบียนโชว์ขึ้นมา
+                    const regView = document.getElementById('view-register');
+                    if (regView) {
+                        regView.classList.add('active');
+                    } else {
+                        alert("❌ หาหน้าจอลงทะเบียน (HTML) ไม่เจอ! รบกวนเช็คว่าเอาโค้ด HTML ไปวางครบไหมครับ");
+                    }
                 }
-            } catch (error) { console.error("Profile Fetch Error:", error); }
+            } catch (error) { 
+                console.error("Profile Fetch Error:", error); 
+                alert("❌ ระบบเชื่อมต่อหลังบ้านขัดข้อง: " + error.message);
+            }
         }
 
         // ฟังก์ชันกดส่งข้อมูลลงทะเบียนจากหน้า LIFF
