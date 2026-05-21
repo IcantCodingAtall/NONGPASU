@@ -11,7 +11,7 @@ const fs = require('fs');
 const line = require('@line/bot-sdk');
 const clientConfig = {
     // ใส่ Token ของพี่เอิร์ทตรงนี้ (หรือถ้าใช้ process.env ก็ใส่ process.env.CHANNEL_ACCESS_TOKEN)
-    channelAccessToken: process.env.LINE_ACCESS_TOKEN 
+    channelAccessToken: 'ADnmFGVMjz+TB5lnRtcAdoZtt0ZNCWMrtCxwpOKpdYRP9Fo3pWsdVyY/v4xQPigdVdeanXbZYZmYt3ljrssq1JI6PCC5jpuG70TrQUE9/Kj7GI/8IritlalvEfMXEDh1jKGIUzsm0v7Qp+Pmu0qm6AdB04t89/1O/w1cDnyilFU='
 };
 const client = new line.messagingApi.MessagingApiClient(clientConfig);
 const app = express();
@@ -133,7 +133,7 @@ async function sendDirectLinePush(toId, messagesArray) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${process.env.LINE_ACCESS_TOKEN}`,
+                'Authorization': `Bearer ADnmFGVMjz+TB5lnRtcAdoZtt0ZNCWMrtCxwpOKpdYRP9Fo3pWsdVyY/v4xQPigdVdeanXbZYZmYt3ljrssq1JI6PCC5jpuG70TrQUE9/Kj7GI/8IritlalvEfMXEDh1jKGIUzsm0v7Qp+Pmu0qm6AdB04t89/1O/w1cDnyilFU=`,
                 'Content-Length': Buffer.byteLength(data)
             }
         };
