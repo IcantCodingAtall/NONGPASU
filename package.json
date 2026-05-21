@@ -17,6 +17,7 @@
     "express": "^5.2.1",
     "google-auth-library": "^10.6.2",
     "google-spreadsheet": "^5.2.0",
+    "node-cron": "^4.2.1",
     "pdf-parse": "^1.1.1"
   }
 }
