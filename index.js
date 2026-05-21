@@ -57,7 +57,7 @@ const middlewareConfig = {
 const clientConfig = { 
     channelAccessToken: process.env.LINE_ACCESS_TOKEN 
 };
-const client = new line.messagingApi.MessagingApiClient(clientConfig);
+
 
 // ⚠️ เปิดระบบ Body Parser เฉพาะช่องทาง API LIFF เท่านั้น เพื่อป้องกันไม่ให้ไปชนลายเซ็น Webhook LINE
 app.use('/api', express.json());
@@ -903,10 +903,16 @@ cron.schedule('0 21 * * *', async () => {
         // 🚨 เอา LINE ID ของพี่เอิร์ทมาใส่ตรงนี้นะครับ
         const myAdminLineId = "Uf335c75a939a20ce7e6c3e836f391a69"; 
         
-        await client.pushMessage(myAdminLineId, {
+        // เปลี่ยนจากของเดิม ให้เป็นแบบนี้ครับ
+await client.pushMessage({
+    to: myAdminLineId,
+    messages: [
+        {
             type: 'text',
             text: '⏰ พี่เอิร์ทครับ! 21:00 น. แล้วน้า\nอย่าลืมเข้าไปเปลี่ยนสถานะใน Google Sheet เป็น "เปิด" เพื่อให้เด็กๆ เริ่มลงทะเบียนสายของวันพรุ่งนี้นะครับ! 🚀'
-        });
+        }
+    ]
+});
         
         console.log('[Cron Job] ส่งแจ้งเตือน 21:00 สำเร็จ');
     } catch (error) {
