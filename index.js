@@ -929,6 +929,8 @@ await client.pushMessage({
 // 🤖 LINE Webhook: ระบบลงทะเบียนสายปฏิบัติการ
 // ==========================================
 app.post('/webhook', express.json(), async (req, res) => {
+    console.log("🔥 [WEBHOOK HIT!] มีการยิงข้อมูลมาที่ /webhook");
+    console.log("📦 ข้อมูลที่ส่งมา:", JSON.stringify(req.body));
     try {
         const events = req.body.events;
         if (!events || events.length === 0) return res.status(200).send('OK');
