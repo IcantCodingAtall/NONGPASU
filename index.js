@@ -930,131 +930,128 @@ await client.pushMessage({
 // ==========================================
 app.post('/webhook', express.json(), async (req, res) => {
     console.log("🔥 [WEBHOOK HIT!] มีการยิงข้อมูลมาที่ /webhook");
-    console.log("📦 ข้อมูลที่ส่งมา:", JSON.stringify(req.body));
     try {
         const events = req.body.events;
         if (!events || events.length === 0) return res.status(200).send('OK');
+
+        // ดึงข้อมูล Sheet เตรียมไว้เลย เพื่อให้ใช้ได้ทั้งระบบลงทะเบียนและประกาศ
+        const doc = await getSheetDoc();
+        const sheet = doc.sheetsByTitle['Master_Data'];
+        if (!sheet) throw new Error("ไม่พบแท็บ Master_Data");
+        const rows = await sheet.getRows();
 
         for (const event of events) {
             if (event.type === 'message' && event.message.type === 'text') {
                 const text = event.message.text.trim();
                 const userId = event.source.userId;
+                const replyToken = event.replyToken;
 
-                console.log(`\n--- 🕵️‍♂️ เริ่มการทำงาน ---`);
-                console.log(`👉 1. ข้อความที่พิมพ์เข้ามาคือ: "${text}"`);
-
+                // --- ส่วนที่ 1: ระบบลงทะเบียน (#ลงทะเบียน) ---
                 const regRegex = /^#?ลงทะเบียน\s+(\d+)\s+(.+)$/;
                 const match = text.match(regRegex);
 
                 if (match) {
                     const studentId = match[1];
                     const dateStr = match[2].trim();
-                    console.log(`👉 2. Regex ถูกต้อง! รหัส: ${studentId}, วันที่: ${dateStr}`);
-
-                    const doc = await getSheetDoc();
-                    const sheet = doc.sheetsByTitle['Master_Data'];
-                    
-                    if (!sheet) {
-                        console.error("❌ หาแท็บ Master_Data ใน Google Sheet ไม่เจอ!");
-                        continue;
-                    }
-                    console.log(`👉 3. เชื่อมต่อ Sheet สำเร็จ กำลังค้นหาข้อมูล...`);
-
-                    const rows = await sheet.getRows();
-                    let foundUser = null;
-
-                    for (let row of rows) {
-                        if (row.get('Student_ID') === studentId && row.get('Camp_Date').includes(dateStr)) {
-                            foundUser = row;
-                            break;
-                        }
-                    }
+                    let foundUser = rows.find(r => r.get('Student_ID') === studentId && r.get('Camp_Date').includes(dateStr));
 
                     if (!foundUser) {
-                        console.log(`❌ 4. หาเด็กไม่เจอ (รหัสหรือวันไม่ตรงใน Sheet)`);
-                        await client.replyMessage({
-                            replyToken: event.replyToken,
-                            messages: [{ type: 'text', text: `❌ ไม่พบข้อมูลการออกสายในวันที่ "${dateStr}" หรือรหัสนักศึกษาไม่ถูกต้องครับ` }]
-                        });
+                        await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `❌ ไม่พบข้อมูลในวันที่ "${dateStr}" หรือรหัสไม่ถูกต้อง` }] });
                         continue;
                     }
 
-                    const status = foundUser.get('Reg_Status');
-                    console.log(`👉 5. เจอข้อมูลเด็กแล้ว! สถานะระบบคือ: ${status}`);
-                    
-                    if (status !== 'เปิด') {
-                        console.log(`❌ 6. ระบบปิดอยู่ บังคับหยุด`);
-                        await client.replyMessage({
-                            replyToken: event.replyToken,
-                            messages: [{ type: 'text', text: `⏳ ระบบยังไม่เปิดให้ลงทะเบียนสายของวันที่ ${dateStr} ครับ รอก่อนน้า!` }]
-                        });
+                    if (foundUser.get('Reg_Status') !== 'เปิด') {
+                        await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `⏳ ระบบยังไม่เปิดให้ลงทะเบียนสายของวันที่ ${dateStr} ครับ` }] });
                         continue;
                     }
 
                     foundUser.assign({ 'LINE_UID': userId });
                     await foundUser.save();
-                    console.log(`👉 7. บันทึก LINE_UID ลง Sheet สำเร็จ`);
 
-                    const nickname = foundUser.get('Nickname');
-                    const year = foundUser.get('Year');
-                    const lineName = foundUser.get('Assigned_Line');
-                    const role = foundUser.get('Role');
+                    // (ใส่โค้ด Flex Message ต้อนรับที่พี่มีอยู่เดิมตรงนี้ได้เลยครับ)
+                    continue; 
+                }
 
-                    console.log(`👉 8. กำลังจะส่ง Flex Message ให้ หมอ${nickname}...`);
-                    
-                    const flexMsg = {
+                // --- ส่วนที่ 2: ระบบประกาศ (#ประกาศ) ---
+                if (text.startsWith('#ประกาศ ')) {
+                    const announcement = text.replace('#ประกาศ ', '').trim();
+                    const sender = rows.find(r => r.get('LINE_UID') === userId);
+
+                    if (!sender || (sender.get('Role') !== 'ผู้นำสาย' && sender.get('Role') !== 'หัวหน้า')) {
+                        await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ เฉพาะผู้นำสายเท่านั้นที่สามารถประกาศได้" }] });
+                        continue;
+                    }
+
+                    const myLineName = sender.get('Assigned_Line');
+                    const myCampDate = sender.get('Camp_Date');
+                    const members = rows.filter(r => r.get('Assigned_Line') === myLineName && r.get('Camp_Date') === myCampDate && r.get('LINE_UID'));
+
+                    const pushMsg = {
                         type: "flex",
-                        altText: `ยินดีต้อนรับเข้าสู่ ${lineName}`,
+                        altText: `📢 ประกาศจากผู้นำสาย: ${myLineName}`,
                         contents: {
                             type: "bubble",
-                            header: {
-                                type: "box", layout: "vertical", backgroundColor: "#00246B",
-                                contents: [
-                                    { type: "text", text: "🤝 MU VET TEAM", color: "#F8B500", weight: "bold", size: "sm" },
-                                    { type: "text", text: `ยินดีต้อนรับสู่ ${lineName}`, color: "#FFFFFF", weight: "bold", size: "xl", margin: "md" }
-                                ]
-                            },
-                            body: {
-                                type: "box", layout: "vertical",
-                                contents: [
-                                    { type: "text", text: `สวัสดี หมอ${nickname} ${year}`, weight: "bold", size: "md", color: "#334155" },
-                                    { type: "text", text: `📅 ประจำวันที่: ${foundUser.get('Camp_Date')}`, size: "sm", color: "#64748b", margin: "sm" },
-                                    { type: "text", text: `👤 ตำแหน่ง: ${role}`, size: "sm", color: "#64748b", margin: "sm" },
-                                    { type: "separator", margin: "md" },
-                                    { type: "text", text: "กรุณากดปุ่มด้านล่างเพื่อเริ่มภารกิจของสายคุณครับ", size: "xs", color: "#94a3b8", wrap: true, margin: "md" }
-                                ]
-                            },
-                            footer: {
-                                type: "box", layout: "vertical",
-                                contents: [
-                                    {
-                                        type: "button", style: "primary", color: "#F8B500",
-                                        action: { type: "uri", label: "🎯 เปิดหน้าปฏิบัติงาน", uri: "https://liff.line.me/2010125977-E8l1g7Zp" }
-                                    }
-                                ]
-                            }
+                            header: { type: "box", layout: "vertical", backgroundColor: "#00246B", contents: [
+                                { type: "text", text: "📢 ประกาศสำคัญจากผู้นำสาย", color: "#F8B500", weight: "bold", size: "sm" }
+                            ]},
+                            body: { type: "box", layout: "vertical", contents: [
+                                { type: "text", text: announcement, wrap: true, color: "#334155", size: "md" }
+                            ]}
                         }
                     };
 
-                    await client.replyMessage({
-                        replyToken: event.replyToken,
-                        messages: [flexMsg]
-                    });
-                    console.log(`✅ 9. ส่ง Flex Message เสร็จสมบูรณ์! จบกระบวนการ!`);
-
-                } else {
-                    console.log(`❌ รูปแบบที่พิมพ์มาไม่ตรงเงื่อนไข (#ลงทะเบียน รหัส วันที่)`);
+                    for (let member of members) {
+                        try { await client.pushMessage({ to: member.get('LINE_UID'), messages: [pushMsg] }); } catch (e) { console.error(e); }
+                    }
+                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "✅ ประกาศถูกส่งถึงสมาชิกทุกคนแล้วครับ!" }] });
+                    continue;
                 }
             }
         }
+        if (text.startsWith('#เลิกสาย ')) {
+    const praise = text.replace('#เลิกสาย ', '').trim();
+    const userId = event.source.userId;
+    const rows = await sheet.getRows();
+    const sender = rows.find(r => r.get('LINE_UID') === userId);
+
+    // ตรวจสอบว่าเป็นหัวหน้า
+    if (!sender || (sender.get('Role') !== 'ผู้นำสาย' && sender.get('Role') !== 'หัวหน้า')) {
+        await client.replyMessage({ replyToken: event.replyToken, messages: [{ type: 'text', text: "❌ เฉพาะผู้นำสายเท่านั้นที่สั่งเลิกสายได้" }] });
+        continue;
+    }
+
+    // ตรวจ Checklist (ใน Checklist_Status)
+    const myLine = sender.get('Assigned_Line');
+    const myDate = sender.get('Camp_Date');
+    const cRows = await doc.sheetsByTitle['Checklist_Status'].getRows();
+    const pending = cRows.filter(r => r.get('Camp_Date') === myDate && r.get('Assigned_Line') === myLine && r.get('Status') !== 'Checked');
+
+    if (pending.length > 0) {
+        await client.replyMessage({ replyToken: event.replyToken, messages: [{ type: 'text', text: `❌ ยังเคลียร์งานไม่ครบครับ เหลืออีก ${pending.length} รายการ ตรวจสอบด้วยครับ!` }] });
+        continue;
+    }
+
+    // ถ้าครบแล้ว -> ประกาศเลิกสาย
+    const members = rows.filter(r => r.get('Assigned_Line') === myLine && r.get('Camp_Date') === myDate && r.get('LINE_UID'));
+    for (let m of members) {
+        await client.pushMessage({ to: m.get('LINE_UID'), messages: [{ 
+            type: "text", 
+            text: `🎉 สาย ${myLine} วันที่ ${myDate} เสร็จสิ้นภารกิจแล้ว! ทุกคนเก่งมาก ๆ\nข้อความจากผู้นำสาย: ${praise}` 
+        }]});
+    }
+    continue;
+}
         res.status(200).send('OK');
     } catch (e) {
-        console.error("🚨 Webhook Error เต็มๆ:", e);
+        console.error("🚨 Webhook Error:", e);
         res.status(500).send('Error');
     }
 });
 // ==========================================
 // 🔑 API รับเรื่องลงทะเบียนสายตรงจากหน้า LIFF
+// ==========================================
+// ==========================================
+// 🔑 API รับเรื่องลงทะเบียนสายตรงจากหน้า LIFF (พร้อมส่ง Flex สรุปสมาชิก)
 // ==========================================
 // ==========================================
 // 🔑 API รับเรื่องลงทะเบียนสายตรงจากหน้า LIFF (พร้อมส่ง Flex สรุปสมาชิก)
@@ -1097,38 +1094,39 @@ app.post('/api/register-user', express.json(), async (req, res) => {
         await foundUser.save();
 
         // ---------------------------------------------------------
-        // 🌟 เพิ่มเติม: ดึงรายชื่อเพื่อนร่วมสายทั้งหมดเพื่อทำ Flex Message
+        // 🌟 เพิ่มเติม: ดึงรายชื่อเพื่อนร่วมสายทั้งหมดเพื่อทำ Flex Message แบบใหม่
         // ---------------------------------------------------------
         const myLineName = foundUser.get('Assigned_Line');
         const myCampDate = foundUser.get('Camp_Date');
         
-        let leaderName = "ยังไม่มีข้อมูล";
-        let registeredMembers = [];
-        let pendingMembers = [];
+        let memberBoxes = [];
 
         // วนลูปหาคนที่อยู่สายเดียวกันและวันเดียวกัน
         for (let row of rows) {
             if (row.get('Assigned_Line') === myLineName && row.get('Camp_Date') === myCampDate) {
-                const memberName = `หมอ${row.get('Nickname')} ${row.get('Year')}`;
+                const isRegistered = !!row.get('LINE_UID'); // ถ้ามี LINE_UID แปลว่าลงแล้ว
+                const role = row.get('Role');
+                const isLeader = (role === 'ผู้นำสาย' || role === 'หัวหน้า');
                 
-                // หาตัวหัวหน้า
-                if (row.get('Role') === 'หัวหน้า') {
-                    leaderName = memberName;
-                }
-
-                // แยกว่าใครลงทะเบียนแล้ว (มี LINE_UID) หรือยังไม่ลง (ช่องว่าง)
-                if (row.get('LINE_UID')) {
-                    registeredMembers.push(`✅ ${memberName}`);
-                } else {
-                    pendingMembers.push(`⏳ ${memberName}`);
-                }
+                // รูปแบบชื่อ: หมอเอิร์ท ปี4 (ผู้นำสาย)
+                const memberText = `หมอ${row.get('Nickname')} ${row.get('Year')} ${isLeader ? '(ผู้นำสาย)' : ''}`;
+                
+                memberBoxes.push({
+                    type: "text",
+                    text: isRegistered ? `✅ ${memberText}` : `❌ ${memberText}`,
+                    size: "sm",
+                    color: isRegistered ? "#16a34a" : "#ef4444", // สีเขียวถ้าลงแล้ว สีแดงถ้ายังไม่ลง
+                    weight: isRegistered ? "regular" : "bold", // ถ้ายังไม่ลงให้ตัวหนาจะได้เด่นๆ
+                    margin: "sm",
+                    wrap: true
+                });
             }
         }
 
         // สร้าง Flex Message สรุปยอด
         const flexMsg = {
             type: "flex",
-            altText: `สรุปข้อมูลสมาชิก ${myLineName}`,
+            altText: `สรุปข้อมูล ${myLineName} วันที่ ${myCampDate}`,
             contents: {
                 type: "bubble",
                 header: {
@@ -1137,21 +1135,33 @@ app.post('/api/register-user', express.json(), async (req, res) => {
                     backgroundColor: "#00246B",
                     contents: [
                         { type: "text", text: "🤝 MU VET TEAM", color: "#F8B500", weight: "bold", size: "sm" },
-                        { type: "text", text: `ยินดีต้อนรับสู่ ${myLineName}`, color: "#FFFFFF", weight: "bold", size: "xl", margin: "md" }
+                        { type: "text", text: `${myLineName}`, color: "#FFFFFF", weight: "bold", size: "xl", margin: "sm" },
+                        { type: "text", text: `ประจำวันที่: ${myCampDate}`, color: "#94a3b8", size: "xs", margin: "xs" }
                     ]
                 },
                 body: {
                     type: "box",
                     layout: "vertical",
                     contents: [
-                        { type: "text", text: `👑 หัวหน้าสาย:`, size: "sm", color: "#94a3b8", weight: "bold" },
-                        { type: "text", text: leaderName, size: "md", color: "#F8B500", weight: "bold", margin: "sm" },
-                        { type: "separator", margin: "md" },
-                        { type: "text", text: `✅ ลงทะเบียนแล้ว (${registeredMembers.length} คน):`, size: "sm", color: "#16a34a", weight: "bold", margin: "md" },
-                        { type: "text", text: registeredMembers.length > 0 ? registeredMembers.join('\n') : "-", size: "sm", color: "#334155", wrap: true, margin: "sm" },
-                        { type: "separator", margin: "md" },
-                        { type: "text", text: `⏳ รอลงทะเบียน (${pendingMembers.length} คน):`, size: "sm", color: "#dc2626", weight: "bold", margin: "md" },
-                        { type: "text", text: pendingMembers.length > 0 ? pendingMembers.join('\n') : "ครบทุกคนแล้ว! 🎉", size: "sm", color: "#334155", wrap: true, margin: "sm" }
+                        { type: "text", text: "รายชื่อสมาชิกในสาย:", weight: "bold", size: "md", color: "#00246B", margin: "sm" },
+                        ...memberBoxes, // เอาชื่อที่ลิสต์ไว้มาหยอดใส่ตรงนี้
+                        { type: "separator", margin: "lg" }
+                    ]
+                },
+                footer: {
+                    type: "box",
+                    layout: "vertical",
+                    contents: [
+                        {
+                            type: "button",
+                            style: "primary",
+                            color: "#F8B500",
+                            action: {
+                                type: "uri",
+                                label: "🎯 เปิดหน้าภารกิจ",
+                                uri: "https://liff.line.me/2010125977-E8l1g7Zp" 
+                            }
+                        }
                     ]
                 }
             }
@@ -1232,6 +1242,104 @@ app.get('/api/user-profile', async (req, res) => {
         console.error("🚨 Profile Fetch Error:", error);
         res.status(500).json({ success: false, message: "Server Error" });
     }
+});
+// ==========================================
+// 📋 API 1: ดึงข้อมูลภารกิจและเช็คลิสต์ที่ทำไปแล้ว
+// ==========================================
+app.get('/api/mission-details', async (req, res) => {
+    try {
+        const { date, line } = req.query;
+        const doc = await getSheetDoc();
+        
+        // 1. ดึงข้อมูลสถานที่และงาน (Missions_Data)
+        const missionSheet = doc.sheetsByTitle['Missions_Data'];
+        if (!missionSheet) return res.status(500).json({ success: false, message: "ไม่พบแท็บ Missions_Data" });
+        
+        const mRows = await missionSheet.getRows();
+        const mission = mRows.find(r => r.get('Camp_Date') === date && r.get('Assigned_Line') === line);
+
+        // 2. ดึงสถานะเช็คลิสต์ (Checklist_Status) เอาเฉพาะที่ติ๊กแล้ว
+        const checkSheet = doc.sheetsByTitle['Checklist_Status'];
+        if (!checkSheet) return res.status(500).json({ success: false, message: "ไม่พบแท็บ Checklist_Status" });
+
+        const cRows = await checkSheet.getRows();
+        
+        // กวาดหาว่างานไหนบ้างที่ถูกติ๊กว่า 'Checked' ในสายนี้และวันนี้
+        const checkedTasks = cRows.filter(r => r.get('Camp_Date') === date && r.get('Assigned_Line') === line && r.get('Status') === 'Checked')
+                                  .map(r => r.get('Task_Name'));
+
+        res.json({
+            success: true,
+            mission: mission ? {
+                location: mission.get('Location'),
+                count: mission.get('Animal_Count'),
+                detail: mission.get('Task_Details')
+            } : null,
+            checkedTasks: checkedTasks // ส่งกลับไปแค่รายชื่อหัวข้อที่ติ๊กแล้ว
+        });
+    } catch (e) { 
+        console.error("Mission Fetch Error:", e);
+        res.status(500).json({ success: false }); 
+    }
+});
+
+// ==========================================
+// ✅ API 2: อัปเดตสถานะเช็คลิสต์ (ระบบฉลาด: ไม่มีสร้างใหม่ มีแล้วอัปเดต)
+// ==========================================
+app.post('/api/update-checklist', express.json(), async (req, res) => {
+    try {
+        const { date, line, phase, task, status } = req.body;
+        const doc = await getSheetDoc();
+        const sheet = doc.sheetsByTitle['Checklist_Status'];
+        const rows = await sheet.getRows();
+        
+        // หาว่าเคยมีการบันทึกหัวข้อนี้ลงชีทหรือยัง?
+        const row = rows.find(r => r.get('Camp_Date') === date && r.get('Assigned_Line') === line && r.get('Task_Name') === task);
+        
+        if (row) {
+            // ถ้ามีแล้ว -> อัปเดตสถานะ (Checked / Unchecked)
+            row.assign({ 'Status': status });
+            await row.save();
+        } else {
+            // ถ้ายังไม่เคยมี -> สร้างแถวใหม่ลง Sheet ทันที
+            await sheet.addRow({
+                'Camp_Date': date,
+                'Assigned_Line': line,
+                'Phase': phase,
+                'Task_Name': task,
+                'Status': status
+            });
+        }
+        res.json({ success: true });
+    } catch (e) { 
+        console.error("Checklist Update Error:", e);
+        res.status(500).json({ success: false }); 
+    }
+});
+app.get('/api/all-missions', async (req, res) => {
+    try {
+        const doc = await getSheetDoc();
+        const mRows = await doc.sheetsByTitle['Missions_Data'].getRows();
+        const cRows = await doc.sheetsByTitle['Checklist_Status'].getRows();
+
+        const missions = mRows.map(m => {
+            const line = m.get('Assigned_Line');
+            const date = m.get('Camp_Date');
+            
+            // คำนวณ % ความคืบหน้า (งานที่ติ๊กแล้ว / งานทั้งหมด)
+            const completed = cRows.filter(c => c.get('Camp_Date') === date && c.get('Assigned_Line') === line && c.get('Status') === 'Checked').length;
+            const progress = Math.round((completed / 10) * 100); // เทียบจากงานมาตรฐาน 10 ข้อ
+
+            return {
+                line: line,
+                location: m.get('Location'),
+                detail: m.get('Task_Details'),
+                progress: progress
+            };
+        });
+
+        res.json({ success: true, missions });
+    } catch (e) { res.status(500).json({ success: false }); }
 });
 app.listen(port, () => { 
     console.log(`🚀 บอท MU VET PORTAL รันระบบสมบูรณ์แบบไร้ที่ติ 100% บน Port ${port}`); 

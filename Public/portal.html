@@ -20,7 +20,7 @@
 
         /* Modern Bottom Nav */
         .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: white; box-shadow: 0 -4px 20px rgba(0,36,107,0.08); display: flex; justify-content: space-around; padding-bottom: env(safe-area-inset-bottom); z-index: 100; border-top-left-radius: 24px; border-top-right-radius: 24px; }
-        .nav-item { flex: 1; text-align: center; padding: 12px 0; color: #94a3b8; font-size: 10px; font-weight: 600; cursor: pointer; transition: 0.2s; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .nav-item { flex: 1; text-align: center; padding: 8px 0; color: #94a3b8; font-size: 10px; font-weight: 600; cursor: pointer; transition: 0.2s; display: flex; flex-direction: column; align-items: center; gap: 4px; }
         .nav-item i { font-size: 20px; transition: 0.2s; }
         .nav-item.active { color: var(--mu-blue); }
         .nav-item.active i { color: var(--mu-gold); transform: translateY(-3px); }
@@ -755,6 +755,156 @@
                 }
             } catch (e) { console.error("Presence Error:", e); }
         }
+        // -----------------------------------------
+        // 📋 ระบบภารกิจ & เช็คลิสต์มาตรฐาน 10 ข้อ
+        // -----------------------------------------
+        
+        // ฝัง Template ไว้ในระบบเลย ไม่ต้องพึ่ง Sheet
+        const CHECKLIST_TEMPLATE = {
+            'Before': {
+                title: '🚛 ก่อนออกสาย', color: 'border-blue-500',
+                tasks: [
+                    'ลงทะเบียน น้องปศุ เสร็จหรือยัง อ่านภารกิจให้ครบ',
+                    'บรีฟสายแยกหรือยัง',
+                    'จัดของและกรอกเบิกของหรือยัง',
+                    'ยกของไปวางรอในเช้าวันที่ออกสายหรือยัง'
+                ]
+            },
+            'During': {
+                title: '💉 ระหว่างออกสาย', color: 'border-amber-500',
+                tasks: [
+                    'ทำหัตถการเสร็จหรือยัง'
+                ]
+            },
+            'After': {
+                title: '🏥 หลังกลับจากสาย', color: 'border-green-500',
+                tasks: [
+                    'ทิ้งขยะจากสายหรือยัง',
+                    'เอาของไปเก็บห้องปศุหรือยัง',
+                    'ทำ Lab เสร็จหรือยัง',
+                    'ต้มไซริงค์แก้วและแช่ยางหรือยัง (ถ้าใช้ไซริงค์พลาสติกติ้กไปเลย)',
+                    'คืนของและกรอกฟอร์มคืนของหรือยัง'
+                ]
+            }
+        };
+
+        async function loadMissionView() {
+            if (!userProfile) return;
+            
+            const container = document.getElementById('checklist-container');
+            container.innerHTML = '<p class="text-center text-xs text-slate-400">กำลังโหลดข้อมูลภารกิจ...</p>';
+
+            try {
+                const res = await fetch(`/api/mission-details?date=${userProfile.campDate}&line=${userProfile.assignedLine}`);
+                const data = await res.json();
+
+                if (data.success) {
+                    // อัปเดตกล่องภารกิจด้านบน
+                    if (data.mission) {
+                        document.getElementById('m-location').innerText = `📍 สถานที่: ${data.mission.location}`;
+                        document.getElementById('m-count').innerText = `🐄 จำนวน: ${data.mission.count}`;
+                        document.getElementById('m-detail').innerText = `📝 งาน: ${data.mission.detail}`;
+                    } else {
+                        document.getElementById('m-location').innerText = `📍 สถานที่: ยังไม่ระบุ`;
+                        document.getElementById('m-count').innerText = `🐄 จำนวน: -`;
+                        document.getElementById('m-detail').innerText = `📝 งาน: รอรับมอบหมาย`;
+                    }
+
+                    // วาด Checklist 10 ข้อ
+                    let html = '';
+                    for (let phaseKey in CHECKLIST_TEMPLATE) {
+                        const phaseData = CHECKLIST_TEMPLATE[phaseKey];
+                        
+                        html += `<div class="mu-card border-l-4 ${phaseData.color}">
+                                    <h4 class="text-xs font-bold text-slate-600 mb-2">${phaseData.title}</h4>
+                                    <div class="space-y-2">`;
+                        
+                        phaseData.tasks.forEach(taskName => {
+                            // เช็คว่างานข้อนี้ อยู่ใน List ที่ติ๊กไปแล้วจากหลังบ้านหรือเปล่า
+                            const isChecked = data.checkedTasks.includes(taskName);
+                            
+                            html += `
+                                <div class="flex items-center justify-between p-2 rounded-lg transition-colors ${isChecked ? 'bg-green-50' : 'bg-slate-50'}">
+                                    <span class="text-xs w-5/6 ${isChecked ? 'text-green-700 line-through' : 'text-slate-600'}">${taskName}</span>
+                                    <input type="checkbox" ${isChecked ? 'checked' : ''} 
+                                        onchange="toggleCheck('${phaseKey}', '${taskName}', this)"
+                                        class="w-5 h-5 accent-green-600 rounded cursor-pointer">
+                                </div>`;
+                        });
+                        html += `</div></div>`;
+                    }
+                    container.innerHTML = html;
+                }
+            } catch (e) { 
+                console.error(e);
+                container.innerHTML = '<p class="text-center text-xs text-red-500">โหลดข้อมูลไม่สำเร็จ</p>';
+            }
+        }
+
+        async function toggleCheck(phase, taskName, checkboxEl) {
+            const isChecked = checkboxEl.checked;
+            checkboxEl.disabled = true; // ล็อกปุ่มกันคนกดรัวๆ ระหว่างเซฟ
+            
+            try {
+                await fetch('/api/update-checklist', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        date: userProfile.campDate,
+                        line: userProfile.assignedLine,
+                        phase: phase,
+                        task: taskName,
+                        status: isChecked ? 'Checked' : 'Unchecked'
+                    })
+                });
+                loadMissionView(); // สั่งรีโหลดหน้าจอใหม่เพื่อให้สีและขีดฆ่าอัปเดต
+            } catch (e) { 
+                alert("บันทึกไม่สำเร็จ กรุณาลองใหม่"); 
+                checkboxEl.checked = !isChecked; // คืนค่าถ้าเซฟพัง
+                checkboxEl.disabled = false;
+            }
+        }
+        async function loadActiveTeamView() {
+    const container = document.getElementById('active-team-container');
+    container.innerHTML = '<p class="text-center text-xs text-slate-400">กำลังโหลดข้อมูลรวมทุกสาย...</p>';
+
+    try {
+        // ดึงข้อมูล Missions ทั้งหมด
+        const res = await fetch('/api/all-missions'); 
+        const data = await res.json();
+
+        if (data.success) {
+            let html = '';
+            data.missions.forEach(m => {
+                html += `
+                <div class="mu-card border-l-4 border-[#00246B] shadow-sm">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="font-bold text-[#00246B]">${m.line}</h3>
+                            <p class="text-[10px] text-slate-500">📍 ${m.location}</p>
+                        </div>
+                        <span class="text-[10px] bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-bold">
+                            ${m.progress}% งานเสร็จ
+                        </span>
+                    </div>
+                    <p class="text-[10px] text-slate-600 mt-2 truncate">📝 ${m.detail}</p>
+                </div>`;
+            });
+            container.innerHTML = html || '<p class="text-center text-xs">ยังไม่มีข้อมูลสายปฏิบัติการในวันนี้</p>';
+        }
+    } catch (e) { container.innerHTML = '<p class="text-center text-xs text-red-500">โหลดข้อมูลไม่สำเร็จ</p>'; }
+}
+
+// อัปเดตฟังก์ชัน switchNav ให้รองรับ
+function switchNav(viewId, el) {
+    document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
+    document.getElementById('view-' + viewId).classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    el.classList.add('active');
+
+    if (viewId === 'mission') loadMissionView();
+    if (viewId === 'active-team') loadActiveTeamView();
+}
     </script>
 </body>
 </html>
