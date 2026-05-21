@@ -927,6 +927,8 @@ await client.pushMessage({
 // ==========================================
 app.post('/webhook', express.json(), async (req, res) => {
     try {
+        console.log("🔔 มีคนทักบอทมา! ข้อมูลที่ได้:", JSON.stringify(req.body.events));
+        
         const events = req.body.events;
         // ถ้า LINE ยิงมาเช็คสถานะเฉยๆ ให้ตอบ OK กลับไป
         if (!events || events.length === 0) return res.status(200).send('OK');
