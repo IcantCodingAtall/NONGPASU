@@ -8,8 +8,10 @@ const path = require('path');
 const fs = require('fs');
 
 // 🌟 เติมบรรทัดนี้กลับเข้าไปครับ! เพื่อให้ระบบรู้จักคำว่า 'line'
-const line = require('@line/bot-sdk'); 
-
+const line = require('@line/bot-sdk');
+const client = new line.Client({
+    channelAccessToken: process.env.LINE_ACCESS_TOKEN
+});
 const app = express();
 
 // ... โค้ดส่วนอื่นๆ ที่เราทำไว้ ...
@@ -890,6 +892,159 @@ async function updateBatchInventory(lineId, staffName, campDate, campLine, items
 // 📢 MODULE 9: SERVER PORT APPLICATION LISTENER
 // ============================================================================
 const port = 3000; 
+const cron = require('node-cron');
+
+// ==========================================
+// ⏰ ระบบแจ้งเตือนพี่เอิร์ทตอน 21:00 น. ทุกวัน
+// ==========================================
+// ตั้งเวลา 0 21 * * * หมายถึง 21:00 น. ของทุกวัน
+cron.schedule('0 21 * * *', async () => {
+    try {
+        // 🚨 เอา LINE ID ของพี่เอิร์ทมาใส่ตรงนี้นะครับ
+        const myAdminLineId = "Uf335c75a939a20ce7e6c3e836f391a69"; 
+        
+        await client.pushMessage(myAdminLineId, {
+            type: 'text',
+            text: '⏰ พี่เอิร์ทครับ! 21:00 น. แล้วน้า\nอย่าลืมเข้าไปเปลี่ยนสถานะใน Google Sheet เป็น "เปิด" เพื่อให้เด็กๆ เริ่มลงทะเบียนสายของวันพรุ่งนี้นะครับ! 🚀'
+        });
+        
+        console.log('[Cron Job] ส่งแจ้งเตือน 21:00 สำเร็จ');
+    } catch (error) {
+        console.error('[Cron Job] ส่งแจ้งเตือนพลาด:', error);
+    }
+}, {
+    scheduled: true,
+    timezone: "Asia/Bangkok" // ตั้งโซนเวลาให้เป็นเวลาไทยเป๊ะๆ
+});
+// ==========================================
+// 🤖 LINE Webhook: ระบบลงทะเบียนสายปฏิบัติการ
+// ==========================================
+app.post('/webhook', express.json(), async (req, res) => {
+    try {
+        const events = req.body.events;
+        // ถ้า LINE ยิงมาเช็คสถานะเฉยๆ ให้ตอบ OK กลับไป
+        if (!events || events.length === 0) return res.status(200).send('OK');
+
+        for (const event of events) {
+            if (event.type === 'message' && event.message.type === 'text') {
+                const text = event.message.text.trim();
+                const userId = event.source.userId;
+
+                // 🌟 ตรวจจับ Format: #ลงทะเบียน [รหัส] [วันที่] (เช่น #ลงทะเบียน 6410001 25)
+                const regRegex = /^#ลงทะเบียน\s+(\d+)\s+(.+)$/;
+                const match = text.match(regRegex);
+
+                if (match) {
+                    const studentId = match[1];
+                    const dateStr = match[2].trim();
+
+                    // ดึงข้อมูลจาก Sheet Master_Data
+                    const doc = await getSheetDoc();
+                    const sheet = doc.sheetsByTitle['Master_Data'];
+                    
+                    if (!sheet) {
+                        console.error("ไม่พบแท็บ Master_Data");
+                        continue;
+                    }
+
+                    const rows = await sheet.getRows();
+                    let foundUser = null;
+
+                    // ค้นหาเด็กจาก รหัสนักศึกษา และ วันที่
+                    for (let row of rows) {
+                        if (row.get('Student_ID') === studentId && row.get('Camp_Date').includes(dateStr)) {
+                            foundUser = row;
+                            break;
+                        }
+                    }
+
+                    // ❌ กรณีที่ 1: หาชื่อไม่เจอ หรือพิมพ์วันผิด
+                    if (!foundUser) {
+                        await client.replyMessage(event.replyToken, { 
+                            type: 'text', 
+                            text: `❌ ไม่พบข้อมูลการออกสายในวันที่ "${dateStr}" หรือรหัสนักศึกษาไม่ถูกต้องครับ\n\n💡 ตัวอย่างการพิมพ์: #ลงทะเบียน 64xxxxx 25` 
+                        });
+                        continue;
+                    }
+
+                    const status = foundUser.get('Reg_Status');
+                    
+                    // ❌ กรณีที่ 2: พี่เอิร์ทยังไม่เปิดระบบ (สวิตช์ปิดอยู่)
+                    if (status !== 'เปิด') {
+                        await client.replyMessage(event.replyToken, { 
+                            type: 'text', 
+                            text: `⏳ ระบบยังไม่เปิดให้ลงทะเบียนสายของวันที่ ${dateStr} ครับ รอก่อนน้า!` 
+                        });
+                        continue;
+                    }
+
+                    // ✅ กรณีสำเร็จ: บันทึก LINE_UID ลง Sheet เพื่อผูกบัญชี
+                    foundUser.assign({ 'LINE_UID': userId });
+                    await foundUser.save();
+
+                    // ดึงข้อมูลมาทำ Flex Message
+                    const nickname = foundUser.get('Nickname');
+                    const year = foundUser.get('Year');
+                    const lineName = foundUser.get('Assigned_Line');
+                    const role = foundUser.get('Role');
+
+                    // 🌟 สร้าง Flex Message ต้อนรับ
+                    const flexMsg = {
+                        type: "flex",
+                        altText: `ยินดีต้อนรับเข้าสู่ ${lineName}`,
+                        contents: {
+                            type: "bubble",
+                            header: {
+                                type: "box",
+                                layout: "vertical",
+                                backgroundColor: "#00246B",
+                                contents: [
+                                    { type: "text", text: "🤝 MU VET TEAM", color: "#F8B500", weight: "bold", size: "sm" },
+                                    { type: "text", text: `ยินดีต้อนรับสู่ ${lineName}`, color: "#FFFFFF", weight: "bold", size: "xl", margin: "md" }
+                                ]
+                            },
+                            body: {
+                                type: "box",
+                                layout: "vertical",
+                                contents: [
+                                    { type: "text", text: `สวัสดี หมอ${nickname} ${year}`, weight: "bold", size: "md", color: "#334155" },
+                                    { type: "text", text: `📅 ประจำวันที่: ${foundUser.get('Camp_Date')}`, size: "sm", color: "#64748b", margin: "sm" },
+                                    { type: "text", text: `👤 ตำแหน่ง: ${role}`, size: "sm", color: "#64748b", margin: "sm" },
+                                    { type: "separator", margin: "md" },
+                                    { type: "text", text: "กรุณากดปุ่มด้านล่างเพื่อเริ่มภารกิจของสายคุณครับ", size: "xs", color: "#94a3b8", wrap: true, margin: "md" }
+                                ]
+                            },
+                            footer: {
+                                type: "box",
+                                layout: "vertical",
+                                contents: [
+                                    {
+                                        type: "button",
+                                        style: "primary",
+                                        color: "#F8B500",
+                                        action: {
+                                            type: "uri",
+                                            label: "🎯 เปิดหน้าปฏิบัติงาน",
+                                            // LIFF URL ของพี่เอิร์ท
+                                            uri: "https://liff.line.me/2010125977-E8l1g7Zp" 
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    };
+
+                    await client.replyMessage(event.replyToken, flexMsg);
+                    console.log(`✅ ${nickname} ลงทะเบียน ${lineName} สำเร็จ`);
+                }
+            }
+        }
+        res.status(200).send('OK');
+    } catch (e) {
+        console.error("Webhook Error:", e);
+        res.status(500).send('Error');
+    }
+});
 app.listen(port, () => { 
     console.log(`🚀 บอท MU VET PORTAL รันระบบสมบูรณ์แบบไร้ที่ติ 100% บน Port ${port}`); 
 });
