@@ -1056,6 +1056,9 @@ app.post('/webhook', express.json(), async (req, res) => {
 // ==========================================
 // 🔑 API รับเรื่องลงทะเบียนสายตรงจากหน้า LIFF
 // ==========================================
+// ==========================================
+// 🔑 API รับเรื่องลงทะเบียนสายตรงจากหน้า LIFF (พร้อมส่ง Flex สรุปสมาชิก)
+// ==========================================
 app.post('/api/register-user', express.json(), async (req, res) => {
     try {
         const { lineId, studentId, dateStr } = req.body;
@@ -1071,7 +1074,7 @@ app.post('/api/register-user', express.json(), async (req, res) => {
         const rows = await sheet.getRows();
         let foundUser = null;
 
-        // วิ่งหาเด็กจาก รหัสนักศึกษา และ วันที่
+        // 1. วิ่งหาเด็กจาก รหัสนักศึกษา และ วันที่
         for (let row of rows) {
             if (row.get('Student_ID') === studentId && row.get('Camp_Date').includes(dateStr)) {
                 foundUser = row;
@@ -1079,20 +1082,93 @@ app.post('/api/register-user', express.json(), async (req, res) => {
             }
         }
 
-        // เงื่อนไขที่ 1: ตรวจไม่เจอประวัติในค่ายประจำวันนั้น
+        // เงื่อนไขที่ 1: ตรวจไม่เจอประวัติ
         if (!foundUser) {
-            return res.json({ success: false, message: `❌ ไม่พบประวัติการออกสายในวันที่ ${dateStr} หรือรหัสนักศึกษาไม่ถูกต้อง (ห้ามแอบสุ่มตรวจน้า!)` });
+            return res.json({ success: false, message: `❌ ไม่พบประวัติการออกสายในวันที่ ${dateStr} หรือรหัสนักศึกษาไม่ถูกต้อง` });
         }
 
-        // เงื่อนไขที่ 2: ตรวจเจอชื่อ แต่พี่เอิร์ทยังไม่ได้ปรับในชีทเป็นคำว่า "เปิด" (ยังไม่ถึงเวลาปล่อยสาย)
+        // เงื่อนไขที่ 2: พี่เอิร์ทยังไม่เปิดระบบ
         if (foundUser.get('Reg_Status') !== 'เปิด') {
             return res.json({ success: false, message: `⏳ ขออภัยครับ ระบบลงทะเบียนสำหรับสายของวันที่ ${dateStr} ยังไม่เปิดใช้งานในขณะนี้` });
         }
 
-        // ผ่านทุกด่าน -> ทำการผูก LINE UID ลงช่อง Google Sheet ของคนๆ นั้นทันที
+        // 2. ผ่านทุกด่าน -> ผูก LINE UID
         foundUser.assign({ 'LINE_UID': lineId });
         await foundUser.save();
 
+        // ---------------------------------------------------------
+        // 🌟 เพิ่มเติม: ดึงรายชื่อเพื่อนร่วมสายทั้งหมดเพื่อทำ Flex Message
+        // ---------------------------------------------------------
+        const myLineName = foundUser.get('Assigned_Line');
+        const myCampDate = foundUser.get('Camp_Date');
+        
+        let leaderName = "ยังไม่มีข้อมูล";
+        let registeredMembers = [];
+        let pendingMembers = [];
+
+        // วนลูปหาคนที่อยู่สายเดียวกันและวันเดียวกัน
+        for (let row of rows) {
+            if (row.get('Assigned_Line') === myLineName && row.get('Camp_Date') === myCampDate) {
+                const memberName = `หมอ${row.get('Nickname')} ${row.get('Year')}`;
+                
+                // หาตัวหัวหน้า
+                if (row.get('Role') === 'หัวหน้า') {
+                    leaderName = memberName;
+                }
+
+                // แยกว่าใครลงทะเบียนแล้ว (มี LINE_UID) หรือยังไม่ลง (ช่องว่าง)
+                if (row.get('LINE_UID')) {
+                    registeredMembers.push(`✅ ${memberName}`);
+                } else {
+                    pendingMembers.push(`⏳ ${memberName}`);
+                }
+            }
+        }
+
+        // สร้าง Flex Message สรุปยอด
+        const flexMsg = {
+            type: "flex",
+            altText: `สรุปข้อมูลสมาชิก ${myLineName}`,
+            contents: {
+                type: "bubble",
+                header: {
+                    type: "box",
+                    layout: "vertical",
+                    backgroundColor: "#00246B",
+                    contents: [
+                        { type: "text", text: "🤝 MU VET TEAM", color: "#F8B500", weight: "bold", size: "sm" },
+                        { type: "text", text: `ยินดีต้อนรับสู่ ${myLineName}`, color: "#FFFFFF", weight: "bold", size: "xl", margin: "md" }
+                    ]
+                },
+                body: {
+                    type: "box",
+                    layout: "vertical",
+                    contents: [
+                        { type: "text", text: `👑 หัวหน้าสาย:`, size: "sm", color: "#94a3b8", weight: "bold" },
+                        { type: "text", text: leaderName, size: "md", color: "#F8B500", weight: "bold", margin: "sm" },
+                        { type: "separator", margin: "md" },
+                        { type: "text", text: `✅ ลงทะเบียนแล้ว (${registeredMembers.length} คน):`, size: "sm", color: "#16a34a", weight: "bold", margin: "md" },
+                        { type: "text", text: registeredMembers.length > 0 ? registeredMembers.join('\n') : "-", size: "sm", color: "#334155", wrap: true, margin: "sm" },
+                        { type: "separator", margin: "md" },
+                        { type: "text", text: `⏳ รอลงทะเบียน (${pendingMembers.length} คน):`, size: "sm", color: "#dc2626", weight: "bold", margin: "md" },
+                        { type: "text", text: pendingMembers.length > 0 ? pendingMembers.join('\n') : "ครบทุกคนแล้ว! 🎉", size: "sm", color: "#334155", wrap: true, margin: "sm" }
+                    ]
+                }
+            }
+        };
+
+        // สั่งให้บอท Push ข้อความไปหาเด็กคนนั้นในแชท LINE ทันที
+        try {
+            await client.pushMessage({
+                to: lineId,
+                messages: [flexMsg]
+            });
+            console.log(`✅ ส่งข้อมูลสรุปสาย ${myLineName} ให้ ${foundUser.get('Nickname')} สำเร็จ`);
+        } catch (pushErr) {
+            console.error("🚨 ส่ง Flex Message ไม่สำเร็จ:", pushErr);
+        }
+
+        // 3. ส่งข้อมูลกลับไปให้หน้าเว็บ LIFF เพื่อเปิดล็อก Dashboard
         res.json({
             success: true,
             profile: {
