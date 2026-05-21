@@ -56,9 +56,7 @@ const { JWT } = require('google-auth-library');
 const middlewareConfig = { 
     channelSecret: process.env.LINE_CHANNEL_SECRET 
 };
-const clientConfig = { 
-    channelAccessToken: process.env.LINE_ACCESS_TOKEN 
-};
+
 
 
 // ⚠️ เปิดระบบ Body Parser เฉพาะช่องทาง API LIFF เท่านั้น เพื่อป้องกันไม่ให้ไปชนลายเซ็น Webhook LINE
