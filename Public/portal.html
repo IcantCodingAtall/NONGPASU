@@ -19,11 +19,41 @@
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
         /* Modern Bottom Nav */
-        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: white; box-shadow: 0 -4px 20px rgba(0,36,107,0.08); display: flex; justify-content: space-around; padding-bottom: env(safe-area-inset-bottom); z-index: 100; border-top-left-radius: 24px; border-top-right-radius: 24px; }
-        .nav-item { flex: 1; text-align: center; padding: 8px 0; color: #94a3b8; font-size: 10px; font-weight: 600; cursor: pointer; transition: 0.2s; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-        .nav-item i { font-size: 20px; transition: 0.2s; }
+        /* Modern Bottom Nav (ปรับปรุงให้รองรับ 6 เมนู) */
+        .bottom-nav { 
+            position: fixed; bottom: 0; left: 0; right: 0; 
+            background: white; 
+            box-shadow: 0 -4px 20px rgba(0,36,107,0.08); 
+            display: flex; 
+            justify-content: space-between; /* ปรับให้กระจายเท่าๆ กัน */
+            padding: 8px 4px; /* ปรับ padding ให้เล็กลง */
+            padding-bottom: env(safe-area-inset-bottom); 
+            z-index: 100; 
+            border-top-left-radius: 20px; 
+            border-top-right-radius: 20px; 
+        }
+        
+        .nav-item { 
+            flex: 1; /* ให้แต่ละปุ่มแบ่งความกว้างเท่าๆ กัน */
+            text-align: center; 
+            color: #94a3b8; 
+            font-size: 8px; /* ปรับ font-size ให้เล็กลงเพื่อให้พอดี 6 เมนู */
+            font-weight: 600; 
+            cursor: pointer; 
+            transition: 0.2s; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            gap: 2px; /* ลดระยะห่างระหว่างไอคอนกับตัวหนังสือ */
+        }
+        
+        .nav-item i { 
+            font-size: 16px; /* ลดขนาดไอคอนลงนิดนึง */
+            transition: 0.2s; 
+        }
+        
         .nav-item.active { color: var(--mu-blue); }
-        .nav-item.active i { color: var(--mu-gold); transform: translateY(-3px); }
+        .nav-item.active i { color: var(--mu-gold); transform: translateY(-2px); }
 
         /* Custom UI Elements */
         .mu-card { background: white; border-radius: 20px; padding: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.03); border: 1px solid #f1f5f9; }
@@ -236,10 +266,14 @@
     </div>
 
     <div class="bottom-nav">
-        <div class="nav-item active" onclick="switchNav('dashboard', this)"><i class="fa-solid fa-chart-simple"></i> Dashboard</div>
-        <div class="nav-item" onclick="switchNav('inv-take', this)"><i class="fa-solid fa-box-open"></i> เบิกของ</div>
-        <div class="nav-item" onclick="switchNav('inv-return', this)"><i class="fa-solid fa-box-archive text-red-400"></i> คืนของ</div>
-        <div class="nav-item" onclick="switchNav('logbook', this)"><i class="fa-solid fa-clipboard-list text-amber-500"></i> Logbook</div>
+        <div class="bottom-nav">
+    <div class="nav-item active" onclick="switchNav('dashboard', this)"><i class="fa-solid fa-chart-simple"></i> Dashboard</div>
+    <div class="nav-item" onclick="switchNav('inv-take', this)"><i class="fa-solid fa-box-open"></i> เบิก</div>
+    <div class="nav-item" onclick="switchNav('inv-return', this)"><i class="fa-solid fa-box-archive"></i> คืน</div>
+    <div class="nav-item" onclick="switchNav('logbook', this)"><i class="fa-solid fa-clipboard-list"></i> Logbook</div>
+    <div class="nav-item" onclick="switchNav('mission', this)"><i class="fa-solid fa-list-check"></i> ภารกิจ</div>
+    <div class="nav-item" onclick="switchNav('active-team', this)"><i class="fa-solid fa-users"></i> ทีม</div>
+</div>
     </div>
 
     <div id="receiptModal" class="modal-overlay" onclick="if(event.target===this) closeModal('receiptModal')">
