@@ -1048,7 +1048,10 @@ app.post('/webhook', express.json(), async (req, res) => {
                         }
                     };
 
-                    await client.replyMessage(event.replyToken, flexMsg);
+                   await client.replyMessage({
+                    replyToken: event.replyToken,
+                    messages: [flexMsg]
+});
                     console.log(`✅ ${nickname} ลงทะเบียน ${lineName} สำเร็จ`);
                 }
             }
