@@ -943,7 +943,7 @@ app.post('/webhook', express.json(), async (req, res) => {
                 console.log(`\n--- 🕵️‍♂️ เริ่มการทำงาน ---`);
                 console.log(`👉 1. ข้อความที่พิมพ์เข้ามาคือ: "${text}"`);
 
-                const regRegex = /^#ลงทะเบียน\s+(\d+)\s+(.+)$/;
+                const regRegex = /^#?ลงทะเบียน\s+(\d+)\s+(.+)$/;
                 const match = text.match(regRegex);
 
                 if (match) {
