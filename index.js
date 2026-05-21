@@ -934,126 +934,77 @@ app.post('/webhook', express.json(), async (req, res) => {
         const events = req.body.events;
         if (!events || events.length === 0) return res.status(200).send('OK');
 
-        // ดึงข้อมูล Sheet เตรียมไว้เลย เพื่อให้ใช้ได้ทั้งระบบลงทะเบียนและประกาศ
         const doc = await getSheetDoc();
         const sheet = doc.sheetsByTitle['Master_Data'];
         if (!sheet) throw new Error("ไม่พบแท็บ Master_Data");
         const rows = await sheet.getRows();
 
         for (const event of events) {
-            if (event.type === 'message' && event.message.type === 'text') {
-                const text = event.message.text.trim();
-                const userId = event.source.userId;
-                const replyToken = event.replyToken;
+            if (event.type !== 'message' || event.message.type !== 'text') continue;
 
-                // --- ส่วนที่ 1: ระบบลงทะเบียน (#ลงทะเบียน) ---
-                const regRegex = /^#?ลงทะเบียน\s+(\d+)\s+(.+)$/;
-                const match = text.match(regRegex);
+            const text = event.message.text.trim();
+            const userId = event.source.userId;
+            const replyToken = event.replyToken;
 
-                if (match) {
-                    const studentId = match[1];
-                    const dateStr = match[2].trim();
-                    let foundUser = rows.find(r => r.get('Student_ID') === studentId && r.get('Camp_Date').includes(dateStr));
+            // --- ส่วนลงทะเบียน ---
+            const match = text.match(/^#?ลงทะเบียน\s+(\d+)\s+(.+)$/);
+            if (match) {
+                const studentId = match[1];
+                const dateStr = match[2].trim();
+                let foundUser = rows.find(r => r.get('Student_ID') === studentId && r.get('Camp_Date').includes(dateStr));
 
-                    if (!foundUser) {
-                        await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `❌ ไม่พบข้อมูลในวันที่ "${dateStr}" หรือรหัสไม่ถูกต้อง` }] });
-                        continue;
-                    }
-
-                    if (foundUser.get('Reg_Status') !== 'เปิด') {
-                        await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `⏳ ระบบยังไม่เปิดให้ลงทะเบียนสายของวันที่ ${dateStr} ครับ` }] });
-                        continue;
-                    }
-
-                    foundUser.assign({ 'LINE_UID': userId });
-                    await foundUser.save();
-
-                    // (ใส่โค้ด Flex Message ต้อนรับที่พี่มีอยู่เดิมตรงนี้ได้เลยครับ)
-                    continue; 
-                }
-
-                // --- ส่วนที่ 2: ระบบประกาศ (#ประกาศ) ---
-                if (text.startsWith('#ประกาศ ')) {
-                    const announcement = text.replace('#ประกาศ ', '').trim();
-                    const sender = rows.find(r => r.get('LINE_UID') === userId);
-
-                    if (!sender || (sender.get('Role') !== 'ผู้นำสาย' && sender.get('Role') !== 'หัวหน้า')) {
-                        await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ เฉพาะผู้นำสายเท่านั้นที่สามารถประกาศได้" }] });
-                        continue;
-                    }
-
-                    const myLineName = sender.get('Assigned_Line');
-                    const myCampDate = sender.get('Camp_Date');
-                    const members = rows.filter(r => r.get('Assigned_Line') === myLineName && r.get('Camp_Date') === myCampDate && r.get('LINE_UID'));
-
-                    const pushMsg = {
-                        type: "flex",
-                        altText: `📢 ประกาศจากผู้นำสาย: ${myLineName}`,
-                        contents: {
-                            type: "bubble",
-                            header: { type: "box", layout: "vertical", backgroundColor: "#00246B", contents: [
-                                { type: "text", text: "📢 ประกาศสำคัญจากผู้นำสาย", color: "#F8B500", weight: "bold", size: "sm" }
-                            ]},
-                            body: { type: "box", layout: "vertical", contents: [
-                                { type: "text", text: announcement, wrap: true, color: "#334155", size: "md" }
-                            ]}
-                        }
-                    };
-
-                    for (let member of members) {
-                        try { await client.pushMessage({ to: member.get('LINE_UID'), messages: [pushMsg] }); } catch (e) { console.error(e); }
-                    }
-                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "✅ ประกาศถูกส่งถึงสมาชิกทุกคนแล้วครับ!" }] });
+                if (!foundUser) {
+                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `❌ ไม่พบข้อมูลในวันที่ "${dateStr}" หรือรหัสไม่ถูกต้อง` }] });
                     continue;
                 }
+
+                if (foundUser.get('Reg_Status') !== 'เปิด') {
+                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `⏳ ระบบยังไม่เปิดให้ลงทะเบียนสายของวันที่ ${dateStr} ครับ` }] });
+                    continue;
+                }
+
+                foundUser.assign({ 'LINE_UID': userId });
+                await foundUser.save();
+                
+                // (ถ้ามี Flex Message ต้อนรับเดิม ให้วางตรงนี้ได้เลยครับ)
+                continue; 
+            }
+
+            // --- ส่วนประกาศ ---
+            if (text.startsWith('#ประกาศ ')) {
+                const announcement = text.replace('#ประกาศ ', '').trim();
+                const sender = rows.find(r => r.get('LINE_UID') === userId);
+
+                if (!sender || (sender.get('Role') !== 'ผู้นำสาย' && sender.get('Role') !== 'หัวหน้า')) {
+                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ เฉพาะผู้นำสายเท่านั้นที่ประกาศได้" }] });
+                    continue;
+                }
+
+                const myLine = sender.get('Assigned_Line');
+                const myDate = sender.get('Camp_Date');
+                const members = rows.filter(r => r.get('Assigned_Line') === myLine && r.get('Camp_Date') === myDate && r.get('LINE_UID'));
+
+                for (let member of members) {
+                    try { 
+                        await client.pushMessage({ 
+                            to: member.get('LINE_UID'), 
+                            messages: [{ 
+                                type: "flex", altText: `📢 ประกาศ: ${myLine}`,
+                                contents: { type: "bubble", header: { type: "box", layout: "vertical", backgroundColor: "#00246B", contents: [{ type: "text", text: "📢 ประกาศจากผู้นำสาย", color: "#F8B500", weight: "bold", size: "sm" }] }, body: { type: "box", layout: "vertical", contents: [{ type: "text", text: announcement, wrap: true, color: "#334155" }] } }
+                            }] 
+                        }); 
+                    } catch (e) { console.error(e); }
+                }
+                await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "✅ ประกาศส่งถึงสมาชิกแล้ว!" }] });
+                continue;
             }
         }
-        if (text.startsWith('#เลิกสาย ')) {
-    const praise = text.replace('#เลิกสาย ', '').trim();
-    const userId = event.source.userId;
-    const rows = await sheet.getRows();
-    const sender = rows.find(r => r.get('LINE_UID') === userId);
-
-    // ตรวจสอบว่าเป็นหัวหน้า
-    if (!sender || (sender.get('Role') !== 'ผู้นำสาย' && sender.get('Role') !== 'หัวหน้า')) {
-        await client.replyMessage({ replyToken: event.replyToken, messages: [{ type: 'text', text: "❌ เฉพาะผู้นำสายเท่านั้นที่สั่งเลิกสายได้" }] });
-        continue;
-    }
-
-    // ตรวจ Checklist (ใน Checklist_Status)
-    const myLine = sender.get('Assigned_Line');
-    const myDate = sender.get('Camp_Date');
-    const cRows = await doc.sheetsByTitle['Checklist_Status'].getRows();
-    const pending = cRows.filter(r => r.get('Camp_Date') === myDate && r.get('Assigned_Line') === myLine && r.get('Status') !== 'Checked');
-
-    if (pending.length > 0) {
-        await client.replyMessage({ replyToken: event.replyToken, messages: [{ type: 'text', text: `❌ ยังเคลียร์งานไม่ครบครับ เหลืออีก ${pending.length} รายการ ตรวจสอบด้วยครับ!` }] });
-        continue;
-    }
-
-    // ถ้าครบแล้ว -> ประกาศเลิกสาย
-    const members = rows.filter(r => r.get('Assigned_Line') === myLine && r.get('Camp_Date') === myDate && r.get('LINE_UID'));
-    for (let m of members) {
-        await client.pushMessage({ to: m.get('LINE_UID'), messages: [{ 
-            type: "text", 
-            text: `🎉 สาย ${myLine} วันที่ ${myDate} เสร็จสิ้นภารกิจแล้ว! ทุกคนเก่งมาก ๆ\nข้อความจากผู้นำสาย: ${praise}` 
-        }]});
-    }
-    continue;
-}
         res.status(200).send('OK');
     } catch (e) {
         console.error("🚨 Webhook Error:", e);
         res.status(500).send('Error');
     }
 });
-// ==========================================
-// 🔑 API รับเรื่องลงทะเบียนสายตรงจากหน้า LIFF
-// ==========================================
-// ==========================================
-// 🔑 API รับเรื่องลงทะเบียนสายตรงจากหน้า LIFF (พร้อมส่ง Flex สรุปสมาชิก)
-// ==========================================
-// ==========================================
 // 🔑 API รับเรื่องลงทะเบียนสายตรงจากหน้า LIFF (พร้อมส่ง Flex สรุปสมาชิก)
 // ==========================================
 app.post('/api/register-user', express.json(), async (req, res) => {
