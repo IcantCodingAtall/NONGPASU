@@ -245,15 +245,22 @@
                     </button>
                 </div>
             </div>
-            <div id="view-active-team" class="view-section pt-4 px-4 pb-20">
-        <h2 class="text-lg font-bold text-[#00246B] mb-4">📊 สถานะสายและภารกิจ</h2>
-        <div id="my-mission-section" class="mb-6">
-            <h3 class="text-sm font-bold text-slate-500 mb-2">📋 ภารกิจสายเราวันนี้</h3>
-            <div id="checklist-container"></div>
+            <div id="view-active-team" class="view-section space-y-4 pt-4 pb-20">
+            <h2 class="text-sm font-bold text-[#00246B]"><i class="fa-solid fa-users-rectangle mr-1"></i> รายการสถานะทีมปฏิบัติงานวันนี้</h2>
+            <div id="active-teams-list" class="space-y-3"></div>
+
+            <div id="selected-mission-wrapper" class="hidden space-y-3 pt-2">
+                <div class="mu-card bg-gradient-to-br from-[#00246B] to-[#0b3b93] text-white p-4 relative">
+                    <button onclick="closeMissionBox()" class="absolute top-2 right-3 text-white/70 text-xs">✕ ปิดหน้าต่าง</button>
+                    <h3 id="target-line-title" class="text-sm font-bold text-[#F8B500]">🎯 รายละเอียดงาน</h3>
+                    <p id="target-line-location" class="text-xs mt-1">📍 สถานที่: </p>
+                    <p id="target-line-count" class="text-xs">🐄 ปริมาณสัตว์: </p>
+                    <div id="target-line-detail" class="text-[11px] bg-white/10 p-2 rounded mt-2 text-white/90"></div>
+                </div>
+                <h3 class="text-xs font-bold text-slate-600 px-1"><i class="fa-solid fa-clipboard-check text-green-600 mr-1"></i> เช็คลิสต์ตรวจสอบความเรียบร้อย</h3>
+                <div id="checklist-render-zone" class="space-y-2"></div>
+            </div>
         </div>
-        <h3 class="text-sm font-bold text-slate-500 mb-2">🌍 สถานะสายอื่น</h3>
-        <div id="other-teams-container" class="space-y-3"></div>
-    </div>
 
     <div id="view-inv-take" class="view-section">
         </div>
@@ -265,12 +272,12 @@
     </div>
     
 <div class="bottom-nav">
-    <div class="nav-item active" onclick="switchNav('dashboard', this)"><i class="fa-solid fa-chart-simple"></i> Dashboard</div>
-    <div class="nav-item" onclick="switchNav('active-team', this)"><i class="fa-solid fa-users"></i> ทีม</div>
-    <div class="nav-item" onclick="switchNav('inv-take', this)"><i class="fa-solid fa-box-open"></i> เบิก</div>
-    <div class="nav-item" onclick="switchNav('inv-return', this)"><i class="fa-solid fa-box-archive"></i> คืน</div>
-    <div class="nav-item" onclick="switchNav('logbook', this)"><i class="fa-solid fa-clipboard-list"></i> Logbook</div>
-</div>
+        <div class="nav-item active" onclick="switchNav('dashboard', this)"><i class="fa-solid fa-chart-simple"></i> Dashboard</div>
+        <div class="nav-item" onclick="switchNav('active-team', this)"><i class="fa-solid fa-users"></i> ทีม</div>
+        <div class="nav-item" onclick="switchNav('inv-take', this)"><i class="fa-solid fa-box-open"></i> เบิก</div>
+        <div class="nav-item" onclick="switchNav('inv-return', this)"><i class="fa-solid fa-box-archive"></i> คืน</div>
+        <div class="nav-item" onclick="switchNav('logbook', this)"><i class="fa-solid fa-clipboard-list"></i> Logbook</div>
+    </div>
 
 </div>
     </div>
@@ -328,31 +335,106 @@
         // -----------------------------------------
         // Navigation & UI
         // -----------------------------------------
-        function switchNav(target, el) {
-            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-            el.classList.add('active');
-            
+        const MASTER_TEMPLATE = {
+            'Before': ['ลงทะเบียน น้องปศุ เสร็จหรือยัง อ่านภารกิจให้ครบ', 'บรีฟสายแยกหรือยัง', 'จัดของและกรอกเบิกของหรือยัง', 'ยกของไปวางรอในเช้าวันที่ออกสายหรือยัง'],
+            'During': ['ทำหัตถการเสร็จหรือยัง'],
+            'After': ['ทิ้งขยะจากสายหรือยัง', 'เอาของไปเก็บห้องปศุหรือยัง', 'ทำ Lab เสร็จหรือยัง', 'ต้มไซริงค์แก้วและแช่ยางหรือยัง (ถ้าใช้ไซริงค์พลาสติกติ้กไปเลย)', 'คืนของและกรอกฟอร์มคืนของหรือยัง']
+        };
+
+        // --- ทับ switchNav ตัวเดิม ---
+        function switchNav(viewId, el) {
             document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
+            const target = document.getElementById('view-' + viewId);
+            if (target) target.classList.add('active');
             
-            if(target === 'dashboard') {
-                document.getElementById('view-dashboard').classList.add('active');
-                fetchDashboard();
-            } else if (target === 'inv-take') {
-                isReturnMode = false;
-                document.getElementById('view-inventory').classList.add('active');
-                document.getElementById('invTitle').innerText = '📤 เบิกอุปกรณ์ออกสาย';
-                loadInventory();
-            } else if (target === 'inv-return') {
-                isReturnMode = true;
-                document.getElementById('view-inventory').classList.add('active');
-                document.getElementById('invTitle').innerText = '📥 คืนอุปกรณ์ (ค้างเบิก)';
-                loadInventory();
-            } else if (target === 'logbook') {
-                document.getElementById('view-logbook').classList.add('active');
-                if(labCounter === 0) addLabEntry(); 
-            }
-            window.scrollTo(0,0);
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            if(el) el.classList.add('active');
+
+            if (viewId === 'active-team') renderActiveTeamsOverview();
         }
+
+        // --- แปะ 4 ฟังก์ชันนี้เพิ่มเข้าไป ---
+        let currentFetchedMissions = [];
+        
+        async function renderActiveTeamsOverview() {
+            if(!userProfile) return;
+            const container = document.getElementById('active-teams-list');
+            container.innerHTML = '<p class="text-center text-xs text-slate-400 py-4"><i class="fa-solid fa-spinner fa-spin mr-1"></i> โหลดข้อมูล...</p>';
+            
+            try {
+                const res = await fetch(`/api/all-missions?date=${userProfile.campDate}`);
+                const data = await res.json();
+                if(data.success) {
+                    currentFetchedMissions = data.missions;
+                    let html = '';
+                    data.missions.forEach((m, idx) => {
+                        html += `
+                        <div onclick="selectTeamMission(${idx})" class="mu-card bg-white flex justify-between items-center cursor-pointer border-l-4 border-l-[#00246B]">
+                            <div>
+                                <h4 class="font-bold text-sm text-[#00246B]">${m.line} ${m.line === userProfile.assignedLine ? '<span class="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded ml-1 font-bold">สายของเรา</span>' : ''}</h4>
+                                <p class="text-[10px] text-slate-400 mt-0.5">📍 ${m.location}</p>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-xs font-bold text-[#00246B]">${m.progress}%</span>
+                            </div>
+                        </div>`;
+                    });
+                    container.innerHTML = html;
+                }
+            } catch(e) { container.innerHTML = '<p class="text-xs text-red-500 text-center">ดาวน์โหลดข้อมูลขัดข้อง</p>'; }
+        }
+
+        async function selectTeamMission(index) {
+            const targetData = currentFetchedMissions[index];
+            if(!targetData) return;
+
+            document.getElementById('target-line-title').innerText = `🎯 ภารกิจ ${targetData.line}`;
+            document.getElementById('target-line-location').innerText = `📍 สถานที่: ${targetData.location}`;
+            document.getElementById('target-line-count').innerText = `🐄 ปริมาณสัตว์: ${targetData.count} ตัว`;
+            document.getElementById('target-line-detail').innerText = `📝 งาน: ${targetData.detail}`;
+            
+            const zone = document.getElementById('checklist-render-zone');
+            zone.innerHTML = '<p class="text-center text-xs text-slate-400">โหลดข้อมูลเช็คลิสต์...</p>';
+            document.getElementById('selected-mission-wrapper').classList.remove('hidden');
+
+            try {
+                const res = await fetch(`/api/checked-tasks?date=${userProfile.campDate}&line=${targetData.line}`);
+                const data = await res.json();
+                
+                let html = '';
+                for(let phase in MASTER_TEMPLATE) {
+                    let phaseTitle = phase === 'Before' ? '🚛 ก่อนออกสาย' : phase === 'During' ? '💉 ระหว่างปฏิบัติงาน' : '🏥 หลังกลับถึงค่าย';
+                    html += `<div class="bg-slate-100 p-2.5 rounded-xl space-y-1.5"><h5 class="text-[10px] font-bold text-slate-500">${phaseTitle}</h5>`;
+                    
+                    MASTER_TEMPLATE[phase].forEach(taskName => {
+                        const isChecked = data.checkedTasks.includes(taskName);
+                        const isDisabled = targetData.line !== userProfile.assignedLine ? 'disabled' : '';
+                        
+                        html += `
+                        <div class="flex items-center justify-between bg-white p-2 rounded-lg text-xs">
+                            <span class="w-11/12 text-slate-600 ${isChecked ? 'line-through text-slate-400':''}">${taskName}</span>
+                            <input type="checkbox" ${isChecked ? 'checked':''} ${isDisabled} onchange="toggleTaskSync('${phase}', '${taskName}', this, '${targetData.line}')" class="w-4 h-4 accent-green-600 rounded">
+                        </div>`;
+                    });
+                    html += `</div>`;
+                }
+                zone.innerHTML = html;
+            } catch(e) { zone.innerHTML = '<p class="text-xs text-red-500">โหลดข้อมูลเช็คลิสต์ไม่ได้</p>'; }
+        }
+
+        async function toggleTaskSync(phase, task, element, lineName) {
+            element.disabled = true;
+            try {
+                await fetch('/api/update-checklist', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ date: userProfile.campDate, line: lineName, phase, task, status: element.checked ? 'Checked':'Unchecked' })
+                });
+                renderActiveTeamsOverview(); 
+            } catch(e) { alert("บันทึกข้อมูลไม่สำเร็จ"); element.checked = !element.checked; element.disabled = false; }
+        }
+
+        function closeMissionBox() { document.getElementById('selected-mission-wrapper').classList.add('hidden'); }
 
         function openModal(id) { document.getElementById(id).classList.add('show'); }
         function closeModal(id) { document.getElementById(id).classList.remove('show'); }

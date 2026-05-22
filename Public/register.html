@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ลงทะเบียน | MU VET PORTAL</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <style>
+        body { font-family: 'Kanit', sans-serif; background-color: #F4F7FA; color: #334155; }
+        .mu-input { width: 100%; padding: 12px 16px; border: 1.5px solid #e2e8f0; border-radius: 12px; font-family: 'Kanit'; font-size: 14px; background: #f8fafc; outline: none; }
+        .mu-input:focus { border-color: #F8B500; background: white; }
+        .mu-btn { width: 100%; padding: 14px; border-radius: 14px; font-weight: 700; font-size: 16px; text-align: center; cursor: pointer; transition: 0.2s; }
+        .mu-btn-primary { background: #F8B500; color: #00246B; box-shadow: 0 4px 15px rgba(248,181,0,0.3); }
+        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #F8B500; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white w-full max-w-sm rounded-3xl shadow-lg p-6 border border-slate-100 relative overflow-hidden">
+        <div class="absolute top-0 left-0 right-0 h-2 bg-[#00246B]"></div>
+        
+        <div class="text-center space-y-2 mt-2 mb-6">
+            <h1 class="text-2xl font-bold text-[#00246B]">MU VET <span class="text-[#F8B500]">PORTAL</span></h1>
+            <p class="text-xs text-slate-500">ลงทะเบียนเข้าสู่ระบบสายปฏิบัติการ</p>
+        </div>
+        
+        <div id="form-section" class="space-y-4">
+            <div>
+                <label class="text-xs font-bold text-[#00246B] block mb-1">รหัสนักศึกษา</label>
+                <input type="text" id="regStudentId" class="mu-input" placeholder="เช่น 6616xxx">
+            </div>
+            <div>
+                <label class="text-xs font-bold text-[#00246B] block mb-1">วันที่ออกสายปฏิบัติการ</label>
+                <select id="regDate" class="mu-input">
+                    <option value="">-- เลือกวันที่ --</option>
+                    <option value="25 พฤษภาคม">25 พฤษภาคม</option>
+                    <option value="26 พฤษภาคม">26 พฤษภาคม</option>
+                    <option value="27 พฤษภาคม">27 พฤษภาคม</option>
+                    <option value="28 พฤษภาคม">28 พฤษภาคม</option>
+                    <option value="29 พฤษภาคม">29 พฤษภาคม</option>
+                </select>
+            </div>
+            
+            <button id="submitBtn" onclick="submitRegistration()" class="mu-btn mu-btn-primary mt-4">
+                🚀 ยืนยันการลงทะเบียน
+            </button>
+        </div>
+
+        <div id="success-section" class="hidden text-center space-y-4 py-6">
+            <div class="text-6xl">🎉</div>
+            <h2 class="text-lg font-bold text-green-600">ลงทะเบียนสำเร็จ!</h2>
+            <p class="text-sm text-slate-600">ระบบได้ผูกสิทธิ์ของคุณเรียบร้อยแล้ว</p>
+            <button onclick="liff.closeWindow()" class="mu-btn bg-slate-200 text-slate-700 mt-4">
+                ปิดหน้าต่างนี้
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // ใส่ LIFF ID ของพี่ตรงนี้ (ตัวอย่าง: 2010125977-E8l1g7Zp)
+        const MY_LIFF_ID = "ใส่_LIFF_ID_ของพี่ตรงนี้"; 
+        let userLineId = "";
+
+        // เริ่มต้นการทำงานของ LIFF เพื่อดึง LINE ID
+        async function initializeLiff() {
+            try {
+                await liff.init({ liffId: MY_LIFF_ID });
+                if (liff.isLoggedIn()) {
+                    const profile = await liff.getProfile();
+                    userLineId = profile.userId;
+                } else {
+                    liff.login(); // บังคับล็อกอินถ้าเปิดในเบราว์เซอร์อื่น
+                }
+            } catch (err) {
+                console.error("LIFF Init Error:", err);
+                alert("เกิดข้อผิดพลาดในการเชื่อมต่อกับ LINE");
+            }
+        }
+
+        window.onload = initializeLiff;
+
+        async function submitRegistration() {
+            const studentId = document.getElementById('regStudentId').value.trim();
+            const dateStr = document.getElementById('regDate').value;
+            const btn = document.getElementById('submitBtn');
+
+            if (!studentId || !dateStr) return alert("กรุณากรอกข้อมูลให้ครบถ้วนครับ");
+            if (!userLineId) return alert("ไม่พบข้อมูล LINE ID กรุณาเปิดผ่านแอป LINE ครับ");
+
+            // เปลี่ยนสถานะปุ่มตอนกำลังโหลด
+            btn.innerHTML = '<span class="loader"></span> กำลังบันทึกข้อมูล...';
+            btn.disabled = true;
+            btn.classList.add('opacity-70');
+
+            try {
+                const res = await fetch('/api/register-user', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ lineId: userLineId, studentId, dateStr })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    // ลงทะเบียนผ่าน ซ่อนฟอร์ม โชว์หน้าสำเร็จ
+                    document.getElementById('form-section').classList.add('hidden');
+                    document.getElementById('success-section').classList.remove('hidden');
+                } else { 
+                    alert(data.message); 
+                    btn.innerHTML = '🚀 ยืนยันการลงทะเบียน';
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-70');
+                }
+            } catch(e) { 
+                alert("ระบบขัดข้อง กรุณาลองใหม่อีกครั้ง"); 
+                btn.innerHTML = '🚀 ยืนยันการลงทะเบียน';
+                btn.disabled = false;
+                btn.classList.remove('opacity-70');
+            }
+        }
+    </script>
+</body>
+</html>
