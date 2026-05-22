@@ -21,36 +21,20 @@
         /* Modern Bottom Nav */
         /* Modern Bottom Nav (ปรับปรุงให้รองรับ 6 เมนู) */
         .bottom-nav { 
-            position: fixed; bottom: 0; left: 0; right: 0; 
-            background: white; 
-            box-shadow: 0 -4px 20px rgba(0,36,107,0.08); 
-            display: flex; 
-            justify-content: space-between; /* ปรับให้กระจายเท่าๆ กัน */
-            padding: 8px 4px; /* ปรับ padding ให้เล็กลง */
-            padding-bottom: env(safe-area-inset-bottom); 
-            z-index: 100; 
-            border-top-left-radius: 20px; 
-            border-top-right-radius: 20px; 
-        }
-        
-        .nav-item { 
-            flex: 1; /* ให้แต่ละปุ่มแบ่งความกว้างเท่าๆ กัน */
-            text-align: center; 
-            color: #94a3b8; 
-            font-size: 8px; /* ปรับ font-size ให้เล็กลงเพื่อให้พอดี 6 เมนู */
-            font-weight: 600; 
-            cursor: pointer; 
-            transition: 0.2s; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            gap: 2px; /* ลดระยะห่างระหว่างไอคอนกับตัวหนังสือ */
-        }
-        
-        .nav-item i { 
-            font-size: 16px; /* ลดขนาดไอคอนลงนิดนึง */
-            transition: 0.2s; 
-        }
+    position: fixed; bottom: 0; left: 0; right: 0; 
+    background: white; 
+    display: flex; 
+    justify-content: space-around; /* ให้ปุ่มกระจายตัวเท่าๆ กัน */
+    padding: 10px 0; 
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+    z-index: 100;
+}
+.nav-item { 
+    flex: 1; /* บังคับให้แต่ละปุ่มกว้างเท่ากันเป๊ะๆ */
+    text-align: center; 
+    font-size: 10px; 
+    cursor: pointer; 
+}
         
         .nav-item.active { color: var(--mu-blue); }
         .nav-item.active i { color: var(--mu-gold); transform: translateY(-2px); }
@@ -261,18 +245,33 @@
                     </button>
                 </div>
             </div>
+            <div id="view-active-team" class="view-section pt-4 px-4 pb-20">
+        <h2 class="text-lg font-bold text-[#00246B] mb-4">📊 สถานะสายและภารกิจ</h2>
+        <div id="my-mission-section" class="mb-6">
+            <h3 class="text-sm font-bold text-slate-500 mb-2">📋 ภารกิจสายเราวันนี้</h3>
+            <div id="checklist-container"></div>
+        </div>
+        <h3 class="text-sm font-bold text-slate-500 mb-2">🌍 สถานะสายอื่น</h3>
+        <div id="other-teams-container" class="space-y-3"></div>
+    </div>
+
+    <div id="view-inv-take" class="view-section">
+        </div>
+
+    <div id="view-inv-return" class="view-section">
+        </div>
         </div>
 
     </div>
-
-    <div class="bottom-nav">
-        <div class="bottom-nav">
+    
+<div class="bottom-nav">
     <div class="nav-item active" onclick="switchNav('dashboard', this)"><i class="fa-solid fa-chart-simple"></i> Dashboard</div>
+    <div class="nav-item" onclick="switchNav('active-team', this)"><i class="fa-solid fa-users"></i> ทีม</div>
     <div class="nav-item" onclick="switchNav('inv-take', this)"><i class="fa-solid fa-box-open"></i> เบิก</div>
     <div class="nav-item" onclick="switchNav('inv-return', this)"><i class="fa-solid fa-box-archive"></i> คืน</div>
     <div class="nav-item" onclick="switchNav('logbook', this)"><i class="fa-solid fa-clipboard-list"></i> Logbook</div>
-    <div class="nav-item" onclick="switchNav('mission', this)"><i class="fa-solid fa-list-check"></i> ภารกิจ</div>
-    <div class="nav-item" onclick="switchNav('active-team', this)"><i class="fa-solid fa-users"></i> ทีม</div>
+</div>
+
 </div>
     </div>
 
@@ -307,7 +306,7 @@
                 <button class="mu-btn bg-[#00246B] text-white flex-1" onclick="submitLogbook(this)">✅ ส่งข้อมูล</button>
             </div>
         </div>
-    </div>
+    
 
     <script>
         // -----------------------------------------
@@ -931,12 +930,22 @@
 
 // อัปเดตฟังก์ชัน switchNav ให้รองรับ
 function switchNav(viewId, el) {
+    // ซ่อนทุกหน้า
     document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
-    document.getElementById('view-' + viewId).classList.add('active');
+    
+    // โชว์หน้าเป้าหมาย
+    const target = document.getElementById('view-' + viewId);
+    if (target) {
+        target.classList.add('active');
+    } else {
+        alert("ไม่พบหน้า: " + viewId);
+    }
+    
+    // เปลี่ยนสถานะสีปุ่มเมนู
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    el.classList.add('active');
+    if (el) el.classList.add('active');
 
-    if (viewId === 'mission') loadMissionView();
+    // เรียกฟังก์ชันโหลดข้อมูล (ถ้ากดหน้าทีม ให้โหลดภารกิจด้วย)
     if (viewId === 'active-team') loadActiveTeamView();
 }
     </script>
