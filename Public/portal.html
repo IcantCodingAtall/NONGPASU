@@ -643,61 +643,80 @@
         }
 
         // 6. INVENTORY LOGIC (อัปเดตแยกหมวดหมู่)
+        // -----------------------------------------
+        // Inventory (อัปเดตระบบดึงของรวมทั้งสาย + ยิง API ตรง)
+        // -----------------------------------------
         async function loadInventory() {
             document.getElementById('invLoading').classList.remove('hidden');
             document.getElementById('invEmpty').classList.add('hidden');
             document.getElementById('invContainer').innerHTML = '';
             
+            if(!isReturnMode) { document.getElementById('invDate').value = ""; document.getElementById('invLine').value = ""; document.getElementById('invDate').disabled = false; document.getElementById('invLine').disabled = false; }
+
             try {
-                let rawItems = [];
-
-                if (isReturnMode) {
-                    // 🌟 ดึงข้อมูลค้างเบิกของทุกคน แล้วเอามารวมกันเฉพาะสายตัวเอง
-                    const res = await fetch('/api/dashboard');
-                    const data = await res.json();
-                    const allBorrows = data.activeBorrows || [];
+                // 🌟 เปลี่ยนมาดึงข้อมูลของ "ทุกคนในสาย" แทนแบบส่วนตัว
+                const url = isReturnMode 
+                    ? `/api/team-taken-items?date=${userProfile.campDate}&line=${userProfile.assignedLine}` 
+                    : '/api/inventory';
                     
-                    // กรองเอาเฉพาะคนที่อยู่ในสายเดียวกัน และวันที่เดียวกัน
-                    const teamBorrows = allBorrows.filter(b => b.line === userProfile.assignedLine && b.date === userProfile.campDate);
-                    
-                    // รวมไอเทมที่เหมือนกันเข้าด้วยกัน (เผื่อ A เบิก Syringe 5, B เบิก 5 จะรวมเป็น 10)
-                    let aggregatedItems = {};
-                    teamBorrows.forEach(userBorrow => {
-                        userBorrow.items.forEach(item => {
-                            if (!aggregatedItems[item.name]) {
-                                aggregatedItems[item.name] = { 
-                                    name: item.name, 
-                                    stock: 0, 
-                                    unit: item.unit || 'ชิ้น', 
-                                    image: item.image || '' 
-                                };
-                            }
-                            aggregatedItems[item.name].stock += parseInt(item.qty);
-                        });
-                    });
-                    
-                    rawItems = Object.values(aggregatedItems);
-
-                } else {
-                    // โหมดเบิกของ ดึงคลังสินค้าปกติ
-                    const res = await fetch('/api/inventory');
-                    const data = await res.json();
-                    rawItems = Array.isArray(data) ? data : [];
-                }
+                const res = await fetch(url, { headers: { 'ngrok-skip-browser-warning': 'true' }});
+                const data = await res.json();
                 
+                let rawItems = isReturnMode ? (data.items || []) : (Array.isArray(data) ? data : []);
+                
+                if(isReturnMode && data.campDate) { document.getElementById('invDate').value = data.campDate; document.getElementById('invDate').disabled = true; }
+                if(isReturnMode && data.campLine) { document.getElementById('invLine').value = data.campLine; document.getElementById('invLine').disabled = true; }
+
                 document.getElementById('invLoading').classList.add('hidden');
                 
                 if(rawItems.length === 0) {
-                    document.getElementById('invEmpty').innerHTML = isReturnMode 
-                        ? "🎉 ทีมเราไม่มีของค้างเบิกแล้ว เยี่ยมมาก!" 
-                        : "กล่องอุปกรณ์ว่างเปล่า";
+                    document.getElementById('invEmpty').innerText = isReturnMode ? "🎉 สายเราไม่มีของค้างเบิกแล้ว เยี่ยมมาก!" : "กล่องอุปกรณ์ว่างเปล่า";
                     document.getElementById('invEmpty').classList.remove('hidden');
                 } else {
                     inventoryData = rawItems.map((item, idx) => ({ ...item, selectedQty: 0, _idx: idx }));
                     renderInvItems();
                 }
                 validateInv();
-            } catch(e) { document.getElementById('invLoading').innerText = "❌ ดึงข้อมูลล้มเหลว"; }
+            } catch(e) { console.error(e); document.getElementById('invLoading').innerText = "❌ ดึงข้อมูลล้มเหลว"; }
+        }
+
+        async function submitInventory(btnObj) {
+            btnObj.innerText = "กำลังส่ง..."; btnObj.disabled = true;
+            const d = document.getElementById('invDate').value; 
+            const l = document.getElementById('invLine').value;
+            
+            // ดึงเฉพาะของที่กดจำนวนมากกว่า 0
+            const selectedItems = inventoryData.filter(i => i.selectedQty > 0).map(i => ({
+                name: i.name,
+                qty: i.selectedQty,
+                unit: i.unit
+            }));
+
+            try {
+                // 🌟 ยิง API ตรงไปที่ Backend รับรองว่าเซฟลง Sheet 100%
+                const res = await fetch('/api/inventory-action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        lineId: myLineId,
+                        staffName: staffName,
+                        date: d,
+                        line: l,
+                        action: isReturnMode ? 'คืนของ' : 'เบิกของ',
+                        items: selectedItems
+                    })
+                });
+
+                const result = await res.json();
+                if (!result.success) throw new Error(result.message);
+
+                alert(`✅ บันทึกรายการ${isReturnMode ? 'คืน' : 'เบิก'}สำเร็จ!`);
+                if (liff.isInClient()) liff.closeWindow(); 
+                else { closeModal('invSummaryModal'); btnObj.innerText = "✅ ยืนยัน"; btnObj.disabled = false; switchNav('dashboard', document.querySelector('.nav-item.active')); }
+            } catch (e) { 
+                alert("❌ การส่งล้มเหลว: " + e.message); 
+                btnObj.innerText = "✅ ยืนยัน"; btnObj.disabled = false; 
+            }
         }
 
         function renderInvItems() {

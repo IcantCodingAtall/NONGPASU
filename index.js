@@ -530,72 +530,6 @@ app.get('/api/inventory', async (req, res) => {
     }
 });
 
-// 2. ช่องทางสืบค้นและดึงรายชื่อสิ่งของยืมค้างคืน (Pending Returns) รายบุคคลไปจัดโชว์หน้าแอป
-app.get('/api/my-taken-items', async (req, res) => {
-    const userId = req.query.userId; 
-    if (!userId) return res.status(400).json({ error: 'ไม่พบไอดีผู้ใช้งาน' });
-    
-    try {
-        const doc = await getSheetDoc(); 
-        const takeoutSheet = doc.sheetsByTitle['Log_Takeout']; // ใช้ชื่อชีทให้ตรง
-        const rows = await takeoutSheet.getRows();
-        
-        let summary = {}; // ใช้รวมยอดรายการของ
-        let firstRowData = { date: "", line: "" }; // เก็บข้อมูลวันที่/สาย ของรายการแรกที่เจอ
-        
-        rows.forEach((row, index) => {
-            // อ้างอิง Index คอลัมน์ (นับเริ่มจาก 0)
-            // คอลัมน์ E (Index 4) = LINE_ID
-            // คอลัมน์ F (Index 5) = Status
-            // คอลัมน์ C (Index 2) = Item Name
-            // คอลัมน์ D (Index 3) = Amount
-            const rowUserId = (row._rawData[4] || '').toString().trim();
-            const status = (row._rawData[5] || '').toString().trim();
-            
-            if (rowUserId === userId && (status.includes('ยังไม่คืน') || status.includes('Pending') || status === '')) {
-                // เก็บวันที่/สาย จากรายการแรกที่เจอ
-                if (!firstRowData.date) {
-                    firstRowData.date = row._rawData[6] || ""; // คอลัมน์ G (Index 6)
-                    firstRowData.line = row._rawData[7] || ""; // คอลัมน์ H (Index 7)
-                }
-                
-                const name = row._rawData[2] || 'อุปกรณ์';
-                const qty = parseInt(row._rawData[3]) || 0;
-                
-                // รวมยอดของคนเดียวกันเข้าด้วยกัน
-                if (name) summary[name] = (summary[name] || 0) + qty;
-            }
-        });
-        
-        // ดึงข้อมูลรูป/หน่วย จากชีท Inventory มาประกบ
-        const invSheet = doc.sheetsByIndex[0]; 
-        const invRows = await invSheet.getRows(); 
-        const itemMap = {}; 
-        
-        invRows.forEach(r => { 
-            const name = r.get('Item_Name') || r.get('รายการ') || ""; 
-            const unit = r.get('Unit') || r.get('ลักษณนาม') || 'ชิ้น'; 
-            const image = r.get('Image_URL') || r.get('รูปภาพ') || '';
-            if (name) itemMap[name] = { unit, image }; 
-        });
-        
-        const resultItems = Object.keys(summary).map(name => ({ 
-            name: name, 
-            stock: summary[name], 
-            unit: itemMap[name] ? itemMap[name].unit : 'ชิ้น',
-            image: itemMap[name] ? itemMap[name].image : ''
-        }));
-        
-        res.json({ items: resultItems, campDate: firstRowData.date, campLine: firstRowData.line });
-        
-    } catch (error) { 
-        console.error("Error API my-taken-items:", error);
-        res.status(500).json({ error: error.message }); 
-    }
-});
-
-
-
 async function handleEvent(event) {
     if (event.type !== 'message' || event.message.type !== 'text') {
         return Promise.resolve(null);
@@ -915,7 +849,163 @@ await client.pushMessage({
     scheduled: true,
     timezone: "Asia/Bangkok" // ตั้งโซนเวลาให้เป็นเวลาไทยเป๊ะๆ
 });
+// ==========================================
+// 📦 API 1: ดึงยอดค้างเบิกรวมของ "ทั้งสายปฏิบัติการ"
+// ==========================================
+app.get('/api/team-taken-items', async (req, res) => {
+    try {
+        const { date, line } = req.query;
+        const doc = await getSheetDoc();
+        
+        // 🚨 พี่ต้องเช็คว่าชื่อแท็บใน Google Sheet ที่เก็บประวัติเบิกของชื่ออะไร (สมมติว่าชื่อ Inventory_Log)
+        const sheet = doc.sheetsByTitle['Inventory_Log']; 
+        if(!sheet) return res.json({ items: [], campDate: date, campLine: line });
+        
+        const rows = await sheet.getRows();
+        let teamItems = {};
 
+        // รวมยอดเบิก-คืน ของทุกคนในสาย
+        rows.forEach(r => {
+            if (r.get('Camp_Date') === date && r.get('Assigned_Line') === line) {
+                const action = r.get('Action'); // 'เบิกของ' หรือ 'คืนของ'
+                const itemName = r.get('Item_Name');
+                const qty = parseInt(r.get('Qty')) || 0;
+
+                if (!teamItems[itemName]) {
+                    teamItems[itemName] = { name: itemName, stock: 0, unit: r.get('Unit') || 'ชิ้น', image: r.get('Image_URL') || '' };
+                }
+
+                if (action === 'เบิกของ') teamItems[itemName].stock += qty;
+                else if (action === 'คืนของ') teamItems[itemName].stock -= qty;
+            }
+        });
+
+        // คัดมาเฉพาะอันที่ยอดคงเหลือมากกว่า 0 (ยังค้างอยู่)
+        const pendingItems = Object.values(teamItems).filter(i => i.stock > 0);
+        res.json({ items: pendingItems, campDate: date, campLine: line });
+    } catch(e) { console.error(e); res.status(500).json({ items: [] }); }
+});
+
+// ==========================================
+// 📦 API 2: บันทึกการเบิก/คืน และส่ง Flex Message
+// ==========================================
+app.post('/api/inventory-action', express.json(), async (req, res) => {
+    try {
+        const { lineId, staffName, date, line, action, items } = req.body;
+        const doc = await getSheetDoc();
+        const sheet = doc.sheetsByTitle['Inventory_Log']; // แท็บเก็บบันทึก
+        
+        if (!sheet) return res.status(500).json({ success: false, message: "ไม่พบแท็บ Inventory_Log" });
+
+        // บันทึกลง Sheet ทีละรายการ
+        for (let item of items) {
+            await sheet.addRow({
+                'Timestamp': new Date().toLocaleString('th-TH'),
+                'LINE_UID': lineId,
+                'Staff_Name': staffName,
+                'Camp_Date': date,
+                'Assigned_Line': line,
+                'Action': action,
+                'Item_Name': item.name,
+                'Qty': item.qty,
+                'Unit': item.unit
+            });
+        }
+
+        // --- สร้าง Flex Message ---
+        const colorMain = action === 'เบิกของ' ? '#00246B' : '#dc2626'; // สีน้ำเงินสำหรับเบิก สีแดงสำหรับคืน
+        const icon = action === 'เบิกของ' ? '📤' : '📥';
+        
+        let itemListHtml = items.map(i => {
+            return {
+                type: "box", layout: "horizontal", margin: "md",
+                contents: [
+                    { type: "text", text: i.name, size: "sm", color: "#334155", flex: 3, wrap: true },
+                    { type: "text", text: `${i.qty} ${i.unit}`, size: "sm", color: colorMain, weight: "bold", align: "end", flex: 1 }
+                ]
+            };
+        });
+
+        const flexMsg = {
+            type: "flex", altText: `แจ้งเตือนทำรายการ${action}`,
+            contents: {
+                type: "bubble",
+                header: {
+                    type: "box", layout: "vertical", backgroundColor: colorMain,
+                    contents: [
+                        { type: "text", text: `${icon} รายการ${action}`, color: "#ffffff", weight: "bold", size: "lg" },
+                        { type: "text", text: `ประจำ ${line} (${date})`, color: "#e2e8f0", size: "xs", margin: "sm" }
+                    ]
+                },
+                body: {
+                    type: "box", layout: "vertical",
+                    contents: [
+                        { type: "text", text: `👤 ผู้ทำรายการ: ${staffName}`, size: "xs", color: "#94a3b8", margin: "sm" },
+                        { type: "separator", margin: "md" },
+                        ...itemListHtml
+                    ]
+                }
+            }
+        };
+
+        // ยิงกลับเข้าแชท
+        await client.pushMessage({ to: lineId, messages: [flexMsg] });
+        res.json({ success: true });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ success: false, message: "บันทึกข้อมูลไม่สำเร็จ" });
+    }
+});
+
+// ==========================================
+// 📝 API 3: แก้ไขบัค undefined ใน Logbook Flex Message
+// ==========================================
+app.post('/api/liff/procedure', express.json(), async (req, res) => {
+    try {
+        const { lineId, staffName, date, line, ownerName, ownerPhone, cows, buffs, goats, sheeps, fmd, lsd, edta, clot, iver, alben, chloro, dexam, vitb } = req.body;
+        
+        const doc = await getSheetDoc();
+        const sheet = doc.sheetsByTitle['Procedure_Log'];
+        if (sheet) {
+            await sheet.addRow({ 'Timestamp': new Date().toLocaleString('th-TH'), 'Staff_Name': staffName, 'Camp_Date': date, 'Assigned_Line': line, 'Owner_Name': ownerName, 'Cow': cows, 'Buff': buffs, 'Goat': goats, 'Sheep': sheeps, 'FMD': fmd, 'LSD': lsd, 'EDTA': edta, 'Clot': clot, 'Iver': iver, 'Alben': alben, 'Chloro': chloro, 'Dexam': dexam, 'VitB': vitb });
+        }
+
+        // 🌟 ซ่อมตัวแปรจับคู่ให้ตรงกับที่หน้าเว็บส่งมา!
+        const totalBlood = (parseInt(edta) || 0) + (parseInt(clot) || 0);
+        const othersStr = `${parseInt(chloro) > 0 ? `Chloro (${chloro}), ` : ''}${parseInt(dexam) > 0 ? `Dexam (${dexam})` : ''}` || '-';
+
+        const flexMsg = {
+            type: "flex", altText: `ยอดหัตถการ ${line}`,
+            contents: {
+                type: "bubble",
+                header: { type: "box", layout: "vertical", backgroundColor: "#00246B", contents: [{ type: "text", text: `📝 ยอดหัตถการ ${line}`, color: "#ffffff", weight: "bold", size: "lg", align: "center" }] },
+                body: {
+                    type: "box", layout: "vertical",
+                    contents: [
+                        { type: "text", text: `👤 Owner: ${ownerName}`, weight: "bold", size: "md", color: "#00246B" },
+                        { type: "text", text: `📞 โทร: ${ownerPhone}`, size: "xs", color: "#64748b", margin: "sm" },
+                        { type: "separator", margin: "md" },
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "Total Animals", size: "sm", color: "#334155", weight: "bold" }, { type: "text", text: `${(cows||0)+(buffs||0)+(goats||0)+(sheeps||0)} ตัว`, size: "sm", color: "#00246B", weight: "bold", align: "end" }] },
+                        { type: "text", text: `วัว:${cows||0} | ควาย:${buffs||0} | แพะ:${goats||0} | แกะ:${sheeps||0}`, size: "xs", color: "#94a3b8", margin: "sm" },
+                        { type: "separator", margin: "md" },
+                        // ซ่อมคำว่า undefined ตรงนี้!
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "💉 Blood Tubes", size: "sm", color: "#334155" }, { type: "text", text: `${totalBlood} หลอด`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "🦠 FMD / LSD", size: "sm", color: "#334155" }, { type: "text", text: `${fmd||0} / ${lsd||0} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "💊 Iver / Alben", size: "sm", color: "#334155" }, { type: "text", text: `${iver||0} / ${alben||0} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "🧪 Vitamin B", size: "sm", color: "#334155" }, { type: "text", text: `${vitb||0} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "📌 Others", size: "sm", color: "#334155" }, { type: "text", text: othersStr, size: "sm", color: "#00246B", align: "end", weight: "bold" }] }
+                    ]
+                }
+            }
+        };
+
+        await client.pushMessage({ to: lineId, messages: [flexMsg] });
+        res.json({ success: true });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ success: false });
+    }
+});
 app.post('/webhook', express.json(), async (req, res) => {
     console.log("🔥 [WEBHOOK HIT!] ข้อมูลดิบที่ส่งมา:", JSON.stringify(req.body)); 
     // ... โค้ดระบบประกาศต่างๆ ...
