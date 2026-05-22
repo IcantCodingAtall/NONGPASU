@@ -394,6 +394,7 @@
                 const res = await fetch('/api/dashboard');
                 const data = await res.json();
 
+                // สัตว์
                 const c = parseInt(data.animals['วัว']||0); const b = parseInt(data.animals['ควาย']||0); 
                 const g = parseInt(data.animals['แพะ']||0); const s = parseInt(data.animals['แกะ']||0); 
                 const total = c+b+g+s;
@@ -405,25 +406,46 @@
                     document.getElementById('animal-chart').style.background = `conic-gradient(#00246B 0% ${p1}%, #F8B500 ${p1}% ${p2}%, #10B981 ${p2}% ${p3}%, #94a3b8 ${p3}% 100%)`;
                 }
 
+                // หัตถการ
                 const p = data.procedures || {};
                 const mapIds = { 'FMD':'stat-fmd', 'LSD':'stat-lsd', 'EDTA_tube':'stat-edta', 'Clot_tube':'stat-clot', 'Ivermectin':'stat-iver', 'Albendazole':'stat-alben', 'Chloramine':'stat-chloro', 'DexamVet':'stat-dexam', 'VitaminB':'stat-vitb' };
                 for(let key in mapIds) { document.getElementById(mapIds[key]).innerText = p[key] || 0; }
 
+                // 🌟 ระบบจัดกลุ่มค้างเบิกเป็นรายสาย (ของใหม่) 🌟
                 const borrowDiv = document.getElementById('dash-borrow-status');
-                activeBorrowData = data.activeBorrows || [];
+                const rawBorrows = data.activeBorrows || []; 
+                
+                let groupedBorrows = {};
+                rawBorrows.forEach(ab => {
+                    const key = ab.line; // จัดกลุ่มด้วยชื่อสาย
+                    if (!groupedBorrows[key]) {
+                        groupedBorrows[key] = { line: ab.line, date: ab.date, totalQty: 0, members: [] };
+                    }
+                    groupedBorrows[key].totalQty += ab.totalQty;
+                    groupedBorrows[key].members.push(ab); // เก็บข้อมูลรายคนไว้ซ้อนด้านใน
+                });
+
+                activeBorrowData = Object.values(groupedBorrows);
+
                 if(activeBorrowData.length > 0) {
                     borrowDiv.innerHTML = activeBorrowData.map((ab, i) => `
-                        <div onclick="showReceipt(${i})" class="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100 cursor-pointer active:scale-95 transition-all">
-                            <div><div class="text-xs font-bold text-[#00246B]">${ab.name}</div><div class="text-[9px] text-slate-400">📅 ${ab.date} | 🚐 ${ab.line}</div></div>
-                            <div class="text-[10px] font-bold text-red-600 bg-red-100 px-2 py-1 rounded">ค้าง ${ab.totalQty} ชิ้น</div>
+                        <div onclick="showReceipt(${i})" class="flex justify-between items-center p-3 bg-white shadow-sm rounded-xl border-l-4 border-l-[#F8B500] cursor-pointer hover:bg-slate-50 active:scale-95 transition-all mb-2 border border-slate-100">
+                            <div>
+                                <div class="text-xs font-bold text-[#00246B]"><i class="fa-solid fa-users text-[#F8B500] mr-1"></i> ${ab.line}</div>
+                                <div class="text-[9px] text-slate-400 mt-0.5">📅 ${ab.date} | 👥 ผู้เบิก ${ab.members.length} คน</div>
+                            </div>
+                            <div class="text-[10px] font-bold text-red-600 bg-red-50 border border-red-100 px-2 py-1 rounded-lg">ค้างรวม ${ab.totalQty} ชิ้น</div>
                         </div>
                     `).join('');
-                } else { borrowDiv.innerHTML = `<div class="text-center text-xs text-slate-400 py-3">🎉 ไม่มีรายการค้างเบิก</div>`; }
+                } else { 
+                    borrowDiv.innerHTML = `<div class="text-center text-xs text-slate-400 py-3 border border-dashed rounded-xl">🎉 ไม่มีรายการค้างเบิก</div>`; 
+                }
 
+                // Lab ผิดปกติ
                 const labDiv = document.getElementById('dash-lab-table');
                 if(data.abnormalLabs && data.abnormalLabs.length > 0) {
                     labDiv.innerHTML = data.abnormalLabs.map(al => `
-                        <div class="p-3 bg-red-50/50 rounded-xl border border-red-100 relative">
+                        <div class="p-3 bg-red-50/50 rounded-xl border border-red-100 relative mb-2">
                             <div class="flex justify-between items-start mb-2 border-b border-red-100 pb-2">
                                 <div>
                                     <div class="text-xs font-bold text-[#00246B]">ID: ${al.animal} <span class="bg-white px-1 rounded text-[9px] text-slate-500 font-normal shadow-sm">${al.species}</span></div>
@@ -436,6 +458,7 @@
                         </div>
                     `).join('');
                 } else { labDiv.innerHTML = `<div class="text-center text-xs text-slate-400 py-3">✅ ไม่พบผลแล็บผิดปกติ</div>`; }
+
             } catch(e) { console.error(e); }
         }
 
@@ -461,9 +484,23 @@
         }
 
         function showReceipt(idx) {
-            const data = activeBorrowData[idx];
-            document.getElementById('receiptMeta').innerHTML = `<b>หมอ${data.name}</b><br>📅 ${data.date} | 🚐 ${data.line}`;
-            document.getElementById('receiptList').innerHTML = data.items.map(i => `<div class="flex justify-between border-b border-slate-100 py-2"><span class="text-slate-700 font-medium">${i.name}</span><span class="font-bold text-[#00246B]">${i.qty} ${i.unit}</span></div>`).join('');
+            const groupData = activeBorrowData[idx];
+            document.getElementById('receiptMeta').innerHTML = `<div class="bg-amber-50 text-amber-700 p-2 rounded-lg mb-2 border border-amber-100"><b>ค้างเบิก: ${groupData.line}</b><br>📅 ${groupData.date}</div>`;
+            
+            let html = '';
+            groupData.members.forEach(member => {
+                html += `<div class="bg-slate-50 p-2.5 rounded-lg mb-2 border border-slate-100">
+                    <div class="font-bold text-[#00246B] text-[11px] mb-1 flex justify-between items-center">
+                        <span><i class="fa-solid fa-user-doctor text-slate-400 mr-1"></i> หมอ${member.name}</span>
+                        <span class="text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold shadow-sm">ค้าง ${member.totalQty} ชิ้น</span>
+                    </div>
+                    <div class="space-y-1 mt-1.5">
+                    ${member.items.map(i => `<div class="flex justify-between items-center border-b border-dashed border-slate-200 py-1 last:border-0"><span class="text-slate-600 font-medium text-[10px]">- ${i.name}</span><span class="font-bold text-slate-700 text-[10px]">${i.qty} ${i.unit}</span></div>`).join('')}
+                    </div>
+                </div>`;
+            });
+            
+            document.getElementById('receiptList').innerHTML = html;
             openModal('receiptModal');
         }
 
