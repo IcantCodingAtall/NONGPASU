@@ -646,15 +646,24 @@
         // -----------------------------------------
         // Inventory (อัปเดตระบบดึงของรวมทั้งสาย + ยิง API ตรง)
         // -----------------------------------------
+        // -----------------------------------------
+        // Inventory (ระบบดึงคลัง และล็อกวันที่/สายอัตโนมัติ)
+        // -----------------------------------------
         async function loadInventory() {
             document.getElementById('invLoading').classList.remove('hidden');
             document.getElementById('invEmpty').classList.add('hidden');
             document.getElementById('invContainer').innerHTML = '';
             
-            if(!isReturnMode) { document.getElementById('invDate').value = ""; document.getElementById('invLine').value = ""; document.getElementById('invDate').disabled = false; document.getElementById('invLine').disabled = false; }
+            // 🌟 ซ่อมแล้ว: บังคับล็อกวันที่และสายตามโปรไฟล์เสมอ ทั้งเบิกและคืน!
+            if (userProfile) {
+                document.getElementById('invDate').innerHTML = `<option value="${userProfile.campDate}">${userProfile.campDate}</option>`;
+                document.getElementById('invLine').innerHTML = `<option value="${userProfile.assignedLine}">${userProfile.assignedLine}</option>`;
+                document.getElementById('invDate').disabled = true;
+                document.getElementById('invLine').disabled = true;
+            }
 
             try {
-                // 🌟 เปลี่ยนมาดึงข้อมูลของ "ทุกคนในสาย" แทนแบบส่วนตัว
+                // ดึงข้อมูลตามโหมด (คืน = ดึงยอดค้างของสาย / เบิก = ดึงคลังรวม)
                 const url = isReturnMode 
                     ? `/api/team-taken-items?date=${userProfile.campDate}&line=${userProfile.assignedLine}` 
                     : '/api/inventory';
@@ -663,9 +672,6 @@
                 const data = await res.json();
                 
                 let rawItems = isReturnMode ? (data.items || []) : (Array.isArray(data) ? data : []);
-                
-                if(isReturnMode && data.campDate) { document.getElementById('invDate').value = data.campDate; document.getElementById('invDate').disabled = true; }
-                if(isReturnMode && data.campLine) { document.getElementById('invLine').value = data.campLine; document.getElementById('invLine').disabled = true; }
 
                 document.getElementById('invLoading').classList.add('hidden');
                 
@@ -674,10 +680,13 @@
                     document.getElementById('invEmpty').classList.remove('hidden');
                 } else {
                     inventoryData = rawItems.map((item, idx) => ({ ...item, selectedQty: 0, _idx: idx }));
-                    renderInvItems();
+                    renderInvItems(); // วาดรายการแยกหมวดหมู่
                 }
                 validateInv();
-            } catch(e) { console.error(e); document.getElementById('invLoading').innerText = "❌ ดึงข้อมูลล้มเหลว"; }
+            } catch(e) { 
+                console.error("Error Loading Inventory:", e); 
+                document.getElementById('invLoading').innerText = "❌ ดึงข้อมูลล้มเหลว"; 
+            }
         }
 
         async function submitInventory(btnObj) {
