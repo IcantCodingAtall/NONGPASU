@@ -1270,29 +1270,77 @@ app.post('/api/update-checklist', express.json(), async (req, res) => {
         res.status(500).json({ success: false }); 
     }
 });
+// ==========================================
+// 🎯 ระบบ API สำหรับหน้าทีมและเช็คลิสต์ภารกิจ
+// ==========================================
+
+// 1. ดึงข้อมูลภารกิจของทุกสายในวันนั้น
 app.get('/api/all-missions', async (req, res) => {
     try {
+        const CAMP_LINES = ["สาย 1", "สาย 2", "สาย 3", "สาย 4"];
+        const targetDate = req.query.date;
+        
         const doc = await getSheetDoc();
-        const mRows = await doc.sheetsByTitle['Missions_Data'].getRows();
-        const cRows = await doc.sheetsByTitle['Checklist_Status'].getRows();
+        const mSheet = doc.sheetsByTitle['Missions_Data'];
+        const cSheet = doc.sheetsByTitle['Checklist_Status'];
+        
+        const mRows = mSheet ? await mSheet.getRows() : [];
+        const cRows = cSheet ? await cSheet.getRows() : [];
 
-        const missions = mRows.map(m => {
-            const line = m.get('Assigned_Line');
-            const date = m.get('Camp_Date');
-            
-            // คำนวณ % ความคืบหน้า (งานที่ติ๊กแล้ว / งานทั้งหมด)
-            const completed = cRows.filter(c => c.get('Camp_Date') === date && c.get('Assigned_Line') === line && c.get('Status') === 'Checked').length;
-            const progress = Math.round((completed / 10) * 100); // เทียบจากงานมาตรฐาน 10 ข้อ
+        const result = CAMP_LINES.map(line => {
+            const mData = mRows.find(r => r.get('Camp_Date') === targetDate && r.get('Assigned_Line') === line);
+            const doneCount = cRows.filter(r => r.get('Camp_Date') === targetDate && r.get('Assigned_Line') === line && r.get('Status') === 'Checked').length;
+            // ภารกิจทั้งหมดมี 10 ข้อ เลยเอา /10 * 100 หาเปอร์เซ็นต์
+            const progress = Math.round((doneCount / 10) * 100);
 
             return {
                 line: line,
-                location: m.get('Location'),
-                detail: m.get('Task_Details'),
-                progress: progress
+                location: mData ? mData.get('Location') : "ยังไม่ระบุสถานที่",
+                count: mData ? mData.get('Animal_Count') : "-",
+                detail: mData ? mData.get('Task_Details') : "รอรับมอบหมายภารกิจ",
+                progress: progress || 0
             };
         });
 
-        res.json({ success: true, missions });
+        res.json({ success: true, missions: result });
+    } catch (e) {
+        console.error("Missions API Error:", e);
+        res.status(500).json({ success: false });
+    }
+});
+
+// 2. ดึงข้อมูลว่าสายนี้ติ๊กเช็คลิสต์ข้อไหนไปแล้วบ้าง
+app.get('/api/checked-tasks', async (req, res) => {
+    try {
+        const { date, line } = req.query;
+        const doc = await getSheetDoc();
+        const sheet = doc.sheetsByTitle['Checklist_Status'];
+        if (!sheet) return res.json({ success: true, checkedTasks: [] });
+
+        const rows = await sheet.getRows();
+        const checkedTasks = rows.filter(r => r.get('Camp_Date') === date && r.get('Assigned_Line') === line && r.get('Status') === 'Checked').map(r => r.get('Task_Name'));
+        res.json({ success: true, checkedTasks });
+    } catch (e) { res.status(500).json({ success: false }); }
+});
+
+// 3. อัปเดตสถานะเช็คลิสต์ (ตอนเด็กกดติ๊กในเว็บ)
+app.post('/api/update-checklist', express.json(), async (req, res) => {
+    try {
+        const { date, line, phase, task, status } = req.body;
+        const doc = await getSheetDoc();
+        const sheet = doc.sheetsByTitle['Checklist_Status'];
+        if (!sheet) return res.status(500).json({ success: false });
+
+        const rows = await sheet.getRows();
+        const row = rows.find(r => r.get('Camp_Date') === date && r.get('Assigned_Line') === line && r.get('Task_Name') === task);
+
+        if (row) {
+            row.assign({ 'Status': status });
+            await row.save();
+        } else {
+            await sheet.addRow({ 'Camp_Date': date, 'Assigned_Line': line, 'Phase': phase, 'Task_Name': task, 'Status': status });
+        }
+        res.json({ success: true });
     } catch (e) { res.status(500).json({ success: false }); }
 });
 app.listen(port, () => { 
