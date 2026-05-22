@@ -971,34 +971,75 @@ app.post('/webhook', express.json(), async (req, res) => {
             }
 
             // --- ส่วนประกาศ ---
-            if (text.startsWith('#ประกาศ ')) {
-    const announcement = text.replace('#ประกาศ ', '').trim();
-    const sender = rows.find(r => r.get('LINE_UID') === userId);
+            // 📢 1. ระบบจัดการคำสั่งประกาศกลุ่มภารกิจ (#ประกาศ)
+            if (text.startsWith('#ประกาศ')) {
+                // ตัดคำว่า #ประกาศ ออก ไม่ว่าจะเว้นวรรคหรือไม่เว้นวรรคก็ตาม
+                const announcement = text.replace(/^#ประกาศ\s*/, '').trim();
+                
+                if (!announcement) {
+                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ กรุณาพิมพ์ข้อความที่ต้องการประกาศด้วยครับ เช่น\n#ประกาศ พรุ่งนี้เจอกัน 6 โมง" }] });
+                    continue;
+                }
 
-    // 🚨 เพิ่มบรรทัดนี้เพื่อดูใน Logs ของ Render ว่าระบบมองเห็นพี่เป็นตำแหน่งอะไร
-    console.log(`🕵️‍♂️ ตรวจพบคำสั่งประกาศจากชื่อ: ${sender ? sender.get('Nickname') : 'ไม่พบชื่อ'} | สิทธิ์: ${sender ? sender.get('Role') : 'ไม่มีสิทธิ์'}`);
+                const sender = rows.find(r => r.get('LINE_UID') === userId);
 
-    if (!sender || (sender.get('Role') !== 'ผู้นำสาย' && sender.get('Role') !== 'หัวหน้า')) {
-        await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ เฉพาะผู้นำสายเท่านั้นที่สามารถประกาศได้" }] });
-        continue;
-    }
+                // เช็คว่าหาตัวคนพิมพ์เจอไหม
+                if (!sender) {
+                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ ไม่พบข้อมูลของคุณในระบบ กรุณาลงทะเบียนผ่าน Rich Menu ก่อนครับ" }] });
+                    continue;
+                }
+
+                // ดึงสิทธิ์มาเช็ค (ใช้ .trim() เผื่อใน Sheet เผลอเคาะเว้นวรรค)
+                const role = sender.get('Role') ? sender.get('Role').trim() : '';
+
+                if (role !== 'ผู้นำสาย' && role !== 'หัวหน้า') {
+                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ ขออภัยครับ สิทธิ์ของคุณไม่ใช่ 'ผู้นำสาย' จึงไม่สามารถประกาศได้" }] });
+                    continue;
+                }
 
                 const myLine = sender.get('Assigned_Line');
                 const myDate = sender.get('Camp_Date');
-                const members = rows.filter(r => r.get('Assigned_Line') === myLine && r.get('Camp_Date') === myDate && r.get('LINE_UID'));
+                
+                // หากลุ่มเป้าหมาย (คนในสายเดียวกัน วันเดียวกัน และผูก LINE แล้ว)
+                const targets = rows.filter(r => r.get('Assigned_Line') === myLine && r.get('Camp_Date') === myDate && r.get('LINE_UID'));
 
-                for (let member of members) {
+                // สร้าง Flex Message สวยๆ
+                const flexAnnounce = {
+                    type: "flex",
+                    altText: `📢 ประกาศด่วนจากผู้นำสาย: ${myLine}`,
+                    contents: {
+                        type: "bubble",
+                        header: { 
+                            type: "box", layout: "vertical", backgroundColor: "#00246B", 
+                            contents: [
+                                { type: "text", text: `📢 ประกาศสำคัญประจำ ${myLine}`, color: "#F8B500", weight: "bold", size: "sm" }
+                            ] 
+                        },
+                        body: { 
+                            type: "box", layout: "vertical", 
+                            contents: [
+                                { type: "text", text: announcement, wrap: true, color: "#334155", size: "md" },
+                                { type: "separator", margin: "lg" },
+                                { type: "text", text: `จาก: หมอ${sender.get('Nickname')} (ผู้นำสาย)`, size: "xs", color: "#94a3b8", margin: "md" }
+                            ] 
+                        }
+                    }
+                };
+
+                let successCount = 0;
+                
+                // ยิงข้อความหาทุกคนในสาย (รวมถึงตัวผู้นำสายเองด้วย จะได้รู้ว่าข้อความหน้าตาเป็นไง)
+                for (let t of targets) {
                     try { 
-                        await client.pushMessage({ 
-                            to: member.get('LINE_UID'), 
-                            messages: [{ 
-                                type: "flex", altText: `📢 ประกาศ: ${myLine}`,
-                                contents: { type: "bubble", header: { type: "box", layout: "vertical", backgroundColor: "#00246B", contents: [{ type: "text", text: "📢 ประกาศจากผู้นำสาย", color: "#F8B500", weight: "bold", size: "sm" }] }, body: { type: "box", layout: "vertical", contents: [{ type: "text", text: announcement, wrap: true, color: "#334155" }] } }
-                            }] 
-                        }); 
-                    } catch (e) { console.error(e); }
+                        await client.pushMessage({ to: t.get('LINE_UID'), messages: [flexAnnounce] }); 
+                        successCount++;
+                    } catch (err) { 
+                        console.error(`ส่งให้ ${t.get('Nickname')} ไม่สำเร็จ:`, err); 
+                    }
                 }
-                await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "✅ ประกาศส่งถึงสมาชิกแล้ว!" }] });
+
+                // แจ้งเตือนคนสั่งว่าส่งสำเร็จ
+                await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `✅ บอทได้ส่งประกาศถึงสมาชิกใน ${myLine} จำนวน ${successCount} คน เรียบร้อยแล้วครับ!` }] });
                 continue;
             }
         }
