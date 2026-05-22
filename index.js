@@ -770,7 +770,7 @@ function createWelcomeMenu(staffName) {
             type: "bubble", 
             header: { type: "box", layout: "vertical", backgroundColor: "#00246B", contents: [ { type: "text", text: "🐴 MU VET PORTAL", color: "#F8B500", weight: "bold", size: "md", align: "center" } ] }, 
             body: { type: "box", layout: "vertical", spacing: "md", contents: [ { type: "text", text: `สวัสดีครับคุณ ${staffName} 👋`, size: "md", weight: "bold", color: "#334155" }, { type: "text", text: "เลือกทำรายการผ่านระบบศูนย์บัญชาการได้เลยครับ", wrap: true, size: "sm", color: "#64748b" } ] }, 
-            footer: { type: "box", layout: "vertical", spacing: "sm", contents: [ { type: "button", style: "primary", color: "#00246B", action: { type: "uri", label: "📱 เปิด Portal MU VET", uri: "https://liff.line.me/2010125815-yjYLY9e2ZcUG" } } ] } 
+            footer: { type: "box", layout: "vertical", spacing: "sm", contents: [ { type: "button", style: "primary", color: "#00246B", action: { type: "uri", label: "📱 เปิด Portal MU VET", uri: "https://liff.line.me/2010125977-E8l1g7Zp" } } ] } 
         } 
     }; 
 }
