@@ -1275,6 +1275,7 @@ app.post('/api/update-checklist', express.json(), async (req, res) => {
 // ==========================================
 
 // 1. ดึงข้อมูลภารกิจของทุกสายในวันนั้น
+// 1. ดึงข้อมูลภารกิจของทุกสายในวันนั้น (อัปเดตดึงรูปภาพและรายชื่อทีม)
 app.get('/api/all-missions', async (req, res) => {
     try {
         const CAMP_LINES = ["สาย 1", "สาย 2", "สาย 3", "สาย 4"];
@@ -1283,22 +1284,44 @@ app.get('/api/all-missions', async (req, res) => {
         const doc = await getSheetDoc();
         const mSheet = doc.sheetsByTitle['Missions_Data'];
         const cSheet = doc.sheetsByTitle['Checklist_Status'];
+        const masterSheet = doc.sheetsByTitle['Master_Data']; // 🚨 เพิ่มการดึงชีทรายชื่อคน
         
         const mRows = mSheet ? await mSheet.getRows() : [];
         const cRows = cSheet ? await cSheet.getRows() : [];
+        const masterRows = masterSheet ? await masterSheet.getRows() : []; 
 
         const result = CAMP_LINES.map(line => {
             const mData = mRows.find(r => r.get('Camp_Date') === targetDate && r.get('Assigned_Line') === line);
             const doneCount = cRows.filter(r => r.get('Camp_Date') === targetDate && r.get('Assigned_Line') === line && r.get('Status') === 'Checked').length;
-            // ภารกิจทั้งหมดมี 10 ข้อ เลยเอา /10 * 100 หาเปอร์เซ็นต์
             const progress = Math.round((doneCount / 10) * 100);
+
+            // 🎯 กวาดหารายชื่อคนใน Master_Data ที่ออกสายนี้ และวันนี้
+            const teamUsers = masterRows.filter(r => r.get('Camp_Date') === targetDate && r.get('Assigned_Line') === line);
+            
+            let leader = null;
+            let members = [];
+
+            // จับแยกใครเป็นหัวหน้า ใครเป็นลูกทีม
+            teamUsers.forEach(u => {
+                const role = u.get('Role');
+                const userData = { name: u.get('Nickname'), year: u.get('Year') };
+                
+                if (role === 'ผู้นำสาย' || role === 'หัวหน้า') {
+                    leader = userData;
+                } else {
+                    members.push(userData);
+                }
+            });
 
             return {
                 line: line,
                 location: mData ? mData.get('Location') : "ยังไม่ระบุสถานที่",
                 count: mData ? mData.get('Animal_Count') : "-",
                 detail: mData ? mData.get('Task_Details') : "รอรับมอบหมายภารกิจ",
-                progress: progress || 0
+                image: mData ? mData.get('Image_URL') : "", // 🖼️ ดึงรูปจากคอลัมน์ Image_URL
+                progress: progress || 0,
+                leader: leader,   // 👑 ส่งข้อมูลหัวหน้า
+                members: members  // 👥 ส่งข้อมูลลูกทีม
             };
         });
 
