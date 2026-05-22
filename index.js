@@ -13,6 +13,7 @@ const clientConfig = {
     // ใส่ Token ของพี่เอิร์ทตรงนี้ (หรือถ้าใช้ process.env ก็ใส่ process.env.CHANNEL_ACCESS_TOKEN)
     channelAccessToken: 'ADnmFGVMjz+TB5lnRtcAdoZtt0ZNCWMrtCxwpOKpdYRP9Fo3pWsdVyY/v4xQPigdVdeanXbZYZmYt3ljrssq1JI6PCC5jpuG70TrQUE9/Kj7GI/8IritlalvEfMXEDh1jKGIUzsm0v7Qp+Pmu0qm6AdB04t89/1O/w1cDnyilFU='
 };
+// 📢 ใส่ Group ID ของกลุ่มไลน์ปศุสัตว์ที่พี่ก๊อปปี้มาจากสเตปที่ 1 ตรงนี้ครับ
 const client = new line.messagingApi.MessagingApiClient(clientConfig);
 const app = express();
 
@@ -934,25 +935,20 @@ app.get('/api/team-taken-items', async (req, res) => {
 // ==========================================
 // 📦 API 2: บันทึกการเบิก/คืน, ตัดสต๊อก Real-time และส่ง Flex Message
 // ==========================================
+// ==========================================
+// 📦 API 2: บันทึกการเบิก/คืน และส่ง Flex Message (เข้าส่วนตัว + เข้ากลุ่มผ่าน env)
+// ==========================================
 app.post('/api/inventory-action', express.json(), async (req, res) => {
     try {
         const { lineId, staffName, date, line, action, items } = req.body;
         const doc = await getSheetDoc();
 
-        // 1. บันทึกลง Log (Takeout / Return)
         if (action === 'เบิกของ') {
             const sheet = doc.sheetsByTitle['Log_Takeout'];
             if (!sheet) throw new Error("ไม่พบแท็บ Log_Takeout");
             for (let item of items) {
                 await sheet.addRow({
-                    'Timestamp': new Date().toLocaleString('th-TH'),
-                    'Staff': staffName,
-                    'Item_Name': item.name,
-                    'Amount_Taken': item.qty,
-                    'LINE_ID': lineId,
-                    'Status': 'ยังไม่คืน',
-                    'Camp_Date': date,
-                    'Camp_Line': line
+                    'Timestamp': new Date().toLocaleString('th-TH'), 'Staff': staffName, 'Item_Name': item.name, 'Amount_Taken': item.qty, 'LINE_ID': lineId, 'Status': 'ยังไม่คืน', 'Camp_Date': date, 'Camp_Line': line
                 });
             }
         } else if (action === 'คืนของ') {
@@ -960,20 +956,12 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
             if (!sheet) throw new Error("ไม่พบแท็บ Log_Return");
             for (let item of items) {
                 await sheet.addRow({
-                    'Timestamp': new Date().toLocaleString('th-TH'),
-                    'LINE_ID': lineId,
-                    'Item_Name': item.name,
-                    'Amount_Returned': item.qty,
-                    'Amount_Used': 0, 
-                    'Unit': item.unit,
-                    'Camp_Date': date,
-                    'Camp_Line': line
+                    'Timestamp': new Date().toLocaleString('th-TH'), 'LINE_ID': lineId, 'Item_Name': item.name, 'Amount_Returned': item.qty, 'Amount_Used': 0, 'Unit': item.unit, 'Camp_Date': date, 'Camp_Line': line
                 });
             }
         }
 
-        // 🌟 2. ระบบตัด/เพิ่มสต๊อกในหน้า Inventory (Real-time) 🌟
-        // 🌟 ซ่อมแซมระบบอัปเดตสต๊อกฝั่ง API ให้มีความเสถียรสูงสุด
+        // ตัดสต๊อกหน้า Inventory
         const invSheet = doc.sheetsByTitle['Inventory'];
         if (invSheet) {
             const invRows = await invSheet.getRows();
@@ -982,24 +970,17 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
                 if (targetRow) {
                     let currentStock = parseInt(targetRow.get('จำนวน')) || 0;
                     let actionQty = parseInt(item.qty) || 0;
-
-                    if (action === 'เบิกของ') {
-                        currentStock -= actionQty;
-                        if (currentStock < 0) currentStock = 0;
-                    } else if (action === 'คืนของ') {
-                        currentStock += actionQty;
-                    }
-
-                    targetRow.set('จำนวน', currentStock); // ใช้ระบบ .set ปลอดภัยที่สุดในการบันทึกข้อมูลหลัก
+                    if (action === 'เบิกของ') { currentStock -= actionQty; if (currentStock < 0) currentStock = 0; } 
+                    else if (action === 'คืนของ') { currentStock += actionQty; }
+                    targetRow.set('จำนวน', currentStock);
                     await targetRow.save(); 
                 }
             }
         }
 
-        // 3. --- สร้าง Flex Message เบิก/คืน ---
+        // --- สร้าง Flex Message ---
         const colorMain = action === 'เบิกของ' ? '#00246B' : '#dc2626'; 
         const icon = action === 'เบิกของ' ? '📤' : '📥';
-        
         let itemListHtml = items.map(i => ({
             type: "box", layout: "horizontal", margin: "md",
             contents: [
@@ -1012,18 +993,25 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
             type: "flex", altText: `แจ้งเตือนทำรายการ${action}`,
             contents: {
                 type: "bubble",
-                header: {
-                    type: "box", layout: "vertical", backgroundColor: colorMain,
-                    contents: [
-                        { type: "text", text: `${icon} รายการ${action}`, color: "#ffffff", weight: "bold", size: "lg" },
-                        { type: "text", text: `ประจำ ${line} (${date})`, color: "#e2e8f0", size: "xs", margin: "sm" }
-                    ]
-                },
+                header: { type: "box", layout: "vertical", backgroundColor: colorMain, contents: [{ type: "text", text: `${icon} รายการ${action}`, color: "#ffffff", weight: "bold", size: "lg" }, { type: "text", text: `ประจำ ${line} (${date})`, color: "#e2e8f0", size: "xs", margin: "sm" }] },
                 body: { type: "box", layout: "vertical", contents: [{ type: "text", text: `👤 ผู้ทำรายการ: หมอ${staffName}`, size: "xs", color: "#94a3b8", margin: "sm" }, { type: "separator", margin: "md" }, ...itemListHtml] }
             }
         };
 
-        await client.pushMessage({ to: lineId, messages: [flexMsg] });
+        // 1. ส่งหาคนทำรายการในแชทส่วนตัว
+        try { await client.pushMessage({ to: lineId, messages: [flexMsg] }); } catch(e) {}
+        
+        // 🌟 2. ดึงไอดีกลุ่มจาก Environment Variable แล้วสั่งยิงเข้ากลุ่มไลน์ปศุสัตว์ทันที
+        const groupId = process.env.LINE_GROUP_ID;
+        if (groupId) {
+            try { 
+                await client.pushMessage({ to: groupId, messages: [flexMsg] }); 
+                console.log(`✅ ยิงแจ้งเตือนรายการ ${action} เข้าไลน์กลุ่มเรียบร้อย`);
+            } catch(err) { 
+                console.error("🚨 ยิงเข้ากลุ่มไลน์ไม่สำเร็จ:", err.message); 
+            }
+        }
+
         res.json({ success: true });
     } catch (e) {
         console.error("Inventory Save Error:", e);
@@ -1037,18 +1025,19 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
 // ==========================================
 // 📝 API 3: บันทึกหัตถการ & แก้ไขบัค undefined
 // ==========================================
+// ==========================================
+// 📝 API 3: บันทึกหัตถการ & ส่งเข้าแชทส่วนตัว + แชทกลุ่มผ่าน env
+// ==========================================
 app.post('/api/liff/procedure', express.json(), async (req, res) => {
     try {
         const { lineId, staffName, date, line, ownerName, ownerPhone, ownerAddress, cows, buffs, goats, sheeps, fmd, lsd, edta, clot, iver, alben, chloro, dexam, vitb } = req.body;
         
         const doc = await getSheetDoc();
-        // รองรับทั้งชื่อชีท Log_Procedures หรือ Procedure_Log
         const sheet = doc.sheetsByTitle['Log_Procedures'] || doc.sheetsByTitle['Procedure_Log'];
         if (sheet) {
             await sheet.addRow({ 'Timestamp': new Date().toLocaleString('th-TH'), 'Staff_Name': staffName, 'Camp_Date': date, 'Assigned_Line': line, 'Owner_Name': ownerName, 'Cow': cows, 'Buff': buffs, 'Goat': goats, 'Sheep': sheeps, 'FMD': fmd, 'LSD': lsd, 'EDTA': edta, 'Clot': clot, 'Iver': iver, 'Alben': alben, 'Chloro': chloro, 'Dexam': dexam, 'VitB': vitb });
         }
 
-        // 🌟 แปลงค่าทุกตัวให้เป็นตัวเลข ป้องกัน undefined 100%
         const safeNum = (val) => parseInt(val) || 0;
         const totalAnim = safeNum(cows) + safeNum(buffs) + safeNum(goats) + safeNum(sheeps);
         const totalBlood = safeNum(edta) + safeNum(clot);
@@ -1083,11 +1072,24 @@ app.post('/api/liff/procedure', express.json(), async (req, res) => {
             }
         };
 
-        await client.pushMessage({ to: lineId, messages: [flexMsg] });
+        // 1. ส่งให้คนคีย์รายงานเข้าแชทเดี่ยว
+        try { await client.pushMessage({ to: lineId, messages: [flexMsg] }); } catch(e) {}
+        
+        // 🌟 2. ดึงไอดีกลุ่มจาก Environment Variable แล้วสั่งยิงสำเนายอดหัตถการเข้ากลุ่มไลน์ปศุสัตว์
+        const groupId = process.env.LINE_GROUP_ID;
+        if (groupId) {
+            try { 
+                await client.pushMessage({ to: groupId, messages: [flexMsg] }); 
+                console.log("✅ ยิงรายงานหัตถการเข้าไลน์กลุ่มเรียบร้อย");
+            } catch(err) { 
+                console.error("🚨 ยิงหัตถการเข้ากลุ่มไม่สำเร็จ:", err.message); 
+            }
+        }
+
         res.json({ success: true });
     } catch (e) {
         console.error("Procedure Save Error:", e);
-        res.status(500).json({ success: false, message: e.message });
+        res.status(500).json({ success: false });
     }
 });
 // ==========================================
