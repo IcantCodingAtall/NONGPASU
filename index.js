@@ -1031,14 +1031,15 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
 // ==========================================
 // 📝 API 3: บันทึกหัตถการ & แก้ไขคำว่า undefined ให้กลายเป็นเลข 0
 // ==========================================
+// ==========================================
+// 📝 API 3: บันทึกหัตถการ & แก้ไขคำว่า undefined ให้เป็น 0 (จับคู่ Sheet เป๊ะๆ)
+// ==========================================
 app.post('/api/liff/procedure', express.json(), async (req, res) => {
     try {
-        // 🧹 ฟังก์ชันกรองตัวแปร: บังคับให้เป็นตัวเลข ถ้าหาไม่เจอให้เป็น 0
+        // 🧹 ฟังก์ชันกรองตัวเลขและข้อความ ป้องกัน undefined
         const cleanNum = (v) => parseInt(v) || 0;
-        // 🧹 ฟังก์ชันกรองข้อความ: ถ้าหาไม่เจอให้เป็นค่า Default
-        const cleanStr = (v, def) => (v === undefined || v === null || String(v).trim() === '') ? def : String(v).trim();
+        const cleanStr = (v, def) => (v === undefined || v === null || String(v).trim() === '' || String(v).trim() === 'undefined') ? def : String(v).trim();
 
-        // 🎯 ดึงตัวแปรให้ตรงกับที่หน้าเว็บส่งมาเป๊ะๆ
         const lineId = req.body.lineId;
         const staffName = cleanStr(req.body.staffName, 'ผู้ปฏิบัติงาน');
         const date = cleanStr(req.body.date, '-');
@@ -1053,43 +1054,45 @@ app.post('/api/liff/procedure', express.json(), async (req, res) => {
         const sheeps = cleanNum(req.body.sheeps);
         const fmd = cleanNum(req.body.fmd);
         const lsd = cleanNum(req.body.lsd);
-        const edta = cleanNum(req.body.edta); // หลอดเลือด EDTA
-        const clot = cleanNum(req.body.clot); // หลอดเลือด Clot
+        const edta = cleanNum(req.body.edta); 
+        const clot = cleanNum(req.body.clot); 
         const iver = cleanNum(req.body.iver);
         const alben = cleanNum(req.body.alben);
         const chloro = cleanNum(req.body.chloro);
         const dexam = cleanNum(req.body.dexam);
-        const vitb = cleanNum(req.body.vitb); // วิตามินบี
+        const vitb = cleanNum(req.body.vitb); 
 
         const doc = await getSheetDoc();
-        // รองรับทั้ง 2 ชื่อแท็บ ป้องกันหาไม่เจอ
-        const sheet = doc.sheetsByTitle['Log_Procedures'] || doc.sheetsByTitle['Procedure_Log'];
+        const sheet = doc.sheetsByTitle['Log_Procedures'];
         
         if (sheet) {
-            // เซฟลง Google Sheet
+            // 🌟 เซฟลง Google Sheet (ชื่อคอลัมน์เป๊ะตามรูปเป๊ะๆ แน่นอน)
             await sheet.addRow({ 
                 'Timestamp': new Date().toLocaleString('th-TH'), 
                 'Staff_Name': staffName, 
                 'Camp_Date': date, 
                 'Assigned_Line': line, 
                 'Owner_Name': ownerName, 
+                'Owner_Phone': ownerPhone,
+                'Owner_Address': ownerAddress,
                 'Cow': cows, 
-                'Buff': buffs, 
+                'Buffalo': buffs, 
                 'Goat': goats, 
                 'Sheep': sheeps, 
+                'EDTA_Tube': edta, 
+                'Clot_Tube': clot, 
+                'Feces': 0,
                 'FMD': fmd, 
                 'LSD': lsd, 
-                'EDTA': edta, 
-                'Clot': clot, 
-                'Iver': iver, 
-                'Alben': alben, 
-                'Chloro': chloro, 
-                'Dexam': dexam, 
-                'VitB': vitb 
+                'Ivermectin': iver, 
+                'Albendazole': alben,
+                'VitaminB': vitb,
+                'Chloramine': chloro, 
+                'DexamVet': dexam, 
+                'Other': (chloro > 0 || dexam > 0) ? `Chloro(${chloro}) Dexam(${dexam})` : '-'
             });
         }
 
-        // คำนวณยอดรวม
         const totalAnim = cows + buffs + goats + sheeps;
         
         const othersArr = [];
@@ -1097,7 +1100,7 @@ app.post('/api/liff/procedure', express.json(), async (req, res) => {
         if (dexam > 0) othersArr.push(`Dexam (${dexam})`);
         const othersStr = othersArr.length > 0 ? othersArr.join(', ') : '-';
 
-        // 🎨 สร้าง Flex Message (จัดรูปแบบใหม่ เปลี่ยน Blood/Feces เป็น Blood Tubes ให้ตรงกับความเป็นจริง)
+        // 🎨 สร้าง Flex Message อันใหม่ล่าสุด!
         const flexMsg = {
             type: "flex", altText: `ยอดหัตถการ ${line}`,
             contents: {
@@ -1113,13 +1116,12 @@ app.post('/api/liff/procedure', express.json(), async (req, res) => {
                         { type: "text", text: `วัว:${cows} | ควาย:${buffs} | แพะ:${goats} | แกะ:${sheeps}`, size: "xs", color: "#94a3b8", margin: "sm" },
                         { type: "separator", margin: "md" },
                         
-                        // 👇 จุดที่เคยขึ้น undefined แก้เป็นยอดหลอดเลือด EDTA และ Clot ที่ถูกต้อง
+                        // 💉 ซ่อมคำว่า Blood / Feces ให้ถูกต้อง
                         { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "💉 Blood (EDTA/Clot)", size: "sm", color: "#334155" }, { type: "text", text: `${edta} / ${clot} หลอด`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
-                        
                         { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "🦠 FMD / LSD", size: "sm", color: "#334155" }, { type: "text", text: `${fmd} / ${lsd} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
                         { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "💊 Iver / Alben", size: "sm", color: "#334155" }, { type: "text", text: `${iver} / ${alben} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
                         
-                        // 👇 จุดที่เคยขึ้น undefined แก้เป็น Vitamin B (vitb)
+                        // 🧪 ซ่อมคำว่า Vitamin ให้ถูกต้อง
                         { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "🧪 Vitamin B", size: "sm", color: "#334155" }, { type: "text", text: `${vitb} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
                         
                         { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "📌 Others", size: "sm", color: "#334155" }, { type: "text", text: othersStr, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
