@@ -928,15 +928,21 @@ await client.pushMessage({
 // ==========================================
 // 🤖 LINE Webhook: ระบบลงทะเบียนสายปฏิบัติการ
 // ==========================================
+// ==========================================
+// 🤖 LINE WEBHOOK: ระบบบอทรับคำสั่ง (#ประกาศ)
+// ==========================================
 app.post('/webhook', express.json(), async (req, res) => {
-    console.log("🔥 [WEBHOOK HIT!] มีการยิงข้อมูลมาที่ /webhook");
     try {
         const events = req.body.events;
         if (!events || events.length === 0) return res.status(200).send('OK');
 
+        // 🕵️‍♂️ 1. แจ้งเตือนใน Log ว่าบอทได้รับข้อความ
+        console.log("🔥 [WEBHOOK] มีการทักเข้ามาที่บอท!");
+
         const doc = await getSheetDoc();
         const sheet = doc.sheetsByTitle['Master_Data'];
-        if (!sheet) throw new Error("ไม่พบแท็บ Master_Data");
+        if (!sheet) throw new Error("ไม่พบแท็บ Master_Data ใน Google Sheet");
+        
         const rows = await sheet.getRows();
 
         for (const event of events) {
@@ -946,106 +952,74 @@ app.post('/webhook', express.json(), async (req, res) => {
             const userId = event.source.userId;
             const replyToken = event.replyToken;
 
-            // --- ส่วนลงทะเบียน ---
-            const match = text.match(/^#?ลงทะเบียน\s+(\d+)\s+(.+)$/);
-            if (match) {
-                const studentId = match[1];
-                const dateStr = match[2].trim();
-                let foundUser = rows.find(r => r.get('Student_ID') === studentId && r.get('Camp_Date').includes(dateStr));
+            // 🕵️‍♂️ 2. พิมพ์บอกว่าใครพิมพ์อะไรมา
+            console.log(`💬 ตรวจจับข้อความ: "${text}" | จาก LINE ID: ${userId}`);
 
-                if (!foundUser) {
-                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `❌ ไม่พบข้อมูลในวันที่ "${dateStr}" หรือรหัสไม่ถูกต้อง` }] });
-                    continue;
-                }
+            // 📢 ดักจับคำสั่งประกาศ (ใช้ Regex รองรับทั้งพิมพ์ติดและพิมพ์ห่าง เช่น '#ประกาศ' หรือ '# ประกาศ')
+            if (text.match(/^#\s*ประกาศ/)) {
+                console.log("👉 เข้าสู่กระบวนการ #ประกาศ...");
 
-                if (foundUser.get('Reg_Status') !== 'เปิด') {
-                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `⏳ ระบบยังไม่เปิดให้ลงทะเบียนสายของวันที่ ${dateStr} ครับ` }] });
-                    continue;
-                }
-
-                foundUser.assign({ 'LINE_UID': userId });
-                await foundUser.save();
-                
-                // (ถ้ามี Flex Message ต้อนรับเดิม ให้วางตรงนี้ได้เลยครับ)
-                continue; 
-            }
-
-            // --- ส่วนประกาศ ---
-            // 📢 1. ระบบจัดการคำสั่งประกาศกลุ่มภารกิจ (#ประกาศ)
-            if (text.startsWith('#ประกาศ')) {
-                // ตัดคำว่า #ประกาศ ออก ไม่ว่าจะเว้นวรรคหรือไม่เว้นวรรคก็ตาม
-                const announcement = text.replace(/^#ประกาศ\s*/, '').trim();
+                // ตัดคำว่าประกาศทิ้งให้เหลือแต่ข้อความ
+                const announcement = text.replace(/^#\s*ประกาศ\s*/, '').trim();
                 
                 if (!announcement) {
+                    console.log("❌ ลืมพิมพ์ข้อความ");
                     await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ กรุณาพิมพ์ข้อความที่ต้องการประกาศด้วยครับ เช่น\n#ประกาศ พรุ่งนี้เจอกัน 6 โมง" }] });
                     continue;
                 }
 
+                // หาข้อมูลคนพิมพ์
                 const sender = rows.find(r => r.get('LINE_UID') === userId);
 
-                // เช็คว่าหาตัวคนพิมพ์เจอไหม
                 if (!sender) {
-                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ ไม่พบข้อมูลของคุณในระบบ กรุณาลงทะเบียนผ่าน Rich Menu ก่อนครับ" }] });
+                    console.log("❌ หาประวัติคนพิมพ์ไม่เจอ (ยังไม่ลงทะเบียน)");
+                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ ไม่พบประวัติของคุณในระบบ กรุณากดปุ่มลงทะเบียนใน Rich Menu ก่อนครับ" }] });
                     continue;
                 }
 
-                // ดึงสิทธิ์มาเช็ค (ใช้ .trim() เผื่อใน Sheet เผลอเคาะเว้นวรรค)
                 const role = sender.get('Role') ? sender.get('Role').trim() : '';
+                console.log(`👤 คนสั่งคือ: หมอ${sender.get('Nickname')} | ตำแหน่ง: [${role}]`);
 
+                // เช็คสิทธิ์
                 if (role !== 'ผู้นำสาย' && role !== 'หัวหน้า') {
-                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ ขออภัยครับ สิทธิ์ของคุณไม่ใช่ 'ผู้นำสาย' จึงไม่สามารถประกาศได้" }] });
+                    console.log("❌ สิทธิ์ไม่ถึง");
+                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `❌ ขออภัยครับ สิทธิ์ของคุณคือ '${role}' ไม่ใช่ 'ผู้นำสาย' จึงประกาศไม่ได้ครับ` }] });
                     continue;
                 }
 
                 const myLine = sender.get('Assigned_Line');
                 const myDate = sender.get('Camp_Date');
                 
-                // หากลุ่มเป้าหมาย (คนในสายเดียวกัน วันเดียวกัน และผูก LINE แล้ว)
+                // หาจำนวนเพื่อนร่วมสาย
                 const targets = rows.filter(r => r.get('Assigned_Line') === myLine && r.get('Camp_Date') === myDate && r.get('LINE_UID'));
+                console.log(`🎯 เป้าหมายส่งข้อความ: ${targets.length} คน (สาย: ${myLine}, วันที่: ${myDate})`);
 
-                // สร้าง Flex Message สวยๆ
                 const flexAnnounce = {
                     type: "flex",
-                    altText: `📢 ประกาศด่วนจากผู้นำสาย: ${myLine}`,
+                    altText: `📢 ประกาศจากผู้นำสาย: ${myLine}`,
                     contents: {
                         type: "bubble",
-                        header: { 
-                            type: "box", layout: "vertical", backgroundColor: "#00246B", 
-                            contents: [
-                                { type: "text", text: `📢 ประกาศสำคัญประจำ ${myLine}`, color: "#F8B500", weight: "bold", size: "sm" }
-                            ] 
-                        },
-                        body: { 
-                            type: "box", layout: "vertical", 
-                            contents: [
-                                { type: "text", text: announcement, wrap: true, color: "#334155", size: "md" },
-                                { type: "separator", margin: "lg" },
-                                { type: "text", text: `จาก: หมอ${sender.get('Nickname')} (ผู้นำสาย)`, size: "xs", color: "#94a3b8", margin: "md" }
-                            ] 
-                        }
+                        header: { type: "box", layout: "vertical", backgroundColor: "#00246B", contents: [{ type: "text", text: `📢 ประกาศสำคัญประจำ ${myLine}`, color: "#F8B500", weight: "bold", size: "sm" }] },
+                        body: { type: "box", layout: "vertical", contents: [{ type: "text", text: announcement, wrap: true, color: "#334155", size: "md" }, { type: "separator", margin: "lg" }, { type: "text", text: `จาก: หมอ${sender.get('Nickname')} (ผู้นำสาย)`, size: "xs", color: "#94a3b8", margin: "md" }] }
                     }
                 };
 
                 let successCount = 0;
-                
-                // ยิงข้อความหาทุกคนในสาย (รวมถึงตัวผู้นำสายเองด้วย จะได้รู้ว่าข้อความหน้าตาเป็นไง)
                 for (let t of targets) {
                     try { 
                         await client.pushMessage({ to: t.get('LINE_UID'), messages: [flexAnnounce] }); 
                         successCount++;
-                    } catch (err) { 
-                        console.error(`ส่งให้ ${t.get('Nickname')} ไม่สำเร็จ:`, err); 
-                    }
+                    } catch (err) { console.error(`❌ ส่งให้ ${t.get('Nickname')} ไม่สำเร็จ:`, err.message); }
                 }
 
-                // แจ้งเตือนคนสั่งว่าส่งสำเร็จ
+                console.log(`✅ ส่งประกาศสำเร็จทั้งหมด ${successCount} คน`);
                 await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `✅ บอทได้ส่งประกาศถึงสมาชิกใน ${myLine} จำนวน ${successCount} คน เรียบร้อยแล้วครับ!` }] });
                 continue;
             }
         }
         res.status(200).send('OK');
     } catch (e) {
-        console.error("🚨 Webhook Error:", e);
+        console.error("🚨 Webhook Error แบบเต็มๆ:", e);
         res.status(500).send('Error');
     }
 });
