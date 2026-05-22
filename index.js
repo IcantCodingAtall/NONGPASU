@@ -862,19 +862,33 @@ await client.pushMessage({
 // ==========================================
 // 📦 API 1: ดึงยอดค้างเบิกรวมของ "ทั้งสายปฏิบัติการ"
 // ==========================================
+// ==========================================
+// 📦 API 1: ดึงยอดค้างเบิกรวมของทั้งสาย + ดึงรูปภาพจาก Inventory มารวม
+// ==========================================
 app.get('/api/team-taken-items', async (req, res) => {
     try {
         const { date, line } = req.query;
         const doc = await getSheetDoc();
         
-        // ดึงจากชีท Log_Takeout และ Log_Return ตามที่พี่มี
         const takeoutSheet = doc.sheetsByTitle['Log_Takeout']; 
         const returnSheet = doc.sheetsByTitle['Log_Return'];
+        const invSheet = doc.sheetsByTitle['Inventory']; // 🚨 ดึงชีทคลังเพื่อเอารูปภาพและหน่วยลักษณะนาม
         
         if(!takeoutSheet) return res.json({ items: [], campDate: date, campLine: line });
         
         const tRows = await takeoutSheet.getRows();
         const rRows = returnSheet ? await returnSheet.getRows() : [];
+        const invRows = invSheet ? await invSheet.getRows() : [];
+
+        // 🌟 สร้างแผนผัง Map ดึงรูปภาพและหน่วยจากคลังมาเตรียมไว้
+        let itemMap = {};
+        invRows.forEach(r => {
+            const name = r.get('รายการ') || "";
+            const unit = r.get('Unit') || "ชิ้น";
+            const img = r.get('Image_URL') || "";
+            if(name) itemMap[name] = { unit, img };
+        });
+
         let teamItems = {};
 
         // 1. นำของที่เบิกไปทั้งหมดมากองรวมกัน
@@ -883,7 +897,14 @@ app.get('/api/team-taken-items', async (req, res) => {
                 const itemName = r.get('Item_Name');
                 const qty = parseInt(r.get('Amount_Taken')) || 0;
 
-                if (!teamItems[itemName]) teamItems[itemName] = { name: itemName, stock: 0, unit: 'ชิ้น', image: '' };
+                if (!teamItems[itemName]) {
+                    teamItems[itemName] = { 
+                        name: itemName, 
+                        stock: 0, 
+                        unit: itemMap[itemName] ? itemMap[itemName].unit : 'ชิ้น', 
+                        image: itemMap[itemName] ? itemMap[itemName].img : '' // 🖼️ ดึงรูปมาโชว์หน้าคืนสำเร็จ!
+                    };
+                }
                 teamItems[itemName].stock += qty;
             }
         });
@@ -898,7 +919,7 @@ app.get('/api/team-taken-items', async (req, res) => {
             }
         });
 
-        // คัดมาเฉพาะอันที่ยอดคงเหลือมากกว่า 0
+        // คัดมาเฉพาะอันที่ยอดคงเหลือมากกว่า 0 (ค้างอยู่)
         const pendingItems = Object.values(teamItems).filter(i => i.stock > 0);
         res.json({ items: pendingItems, campDate: date, campLine: line });
     } catch(e) { console.error(e); res.status(500).json({ items: [] }); }
@@ -952,27 +973,24 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
         }
 
         // 🌟 2. ระบบตัด/เพิ่มสต๊อกในหน้า Inventory (Real-time) 🌟
+        // 🌟 ซ่อมแซมระบบอัปเดตสต๊อกฝั่ง API ให้มีความเสถียรสูงสุด
         const invSheet = doc.sheetsByTitle['Inventory'];
         if (invSheet) {
             const invRows = await invSheet.getRows();
-            
             for (let item of items) {
-                // ค้นหาแถวใน Inventory ที่ชื่ออุปกรณ์ตรงกัน (อ้างอิงคอลัมน์ 'รายการ')
                 const targetRow = invRows.find(r => r.get('รายการ') === item.name);
-                
                 if (targetRow) {
                     let currentStock = parseInt(targetRow.get('จำนวน')) || 0;
                     let actionQty = parseInt(item.qty) || 0;
 
                     if (action === 'เบิกของ') {
-                        currentStock -= actionQty; // เบิก = หักออก
-                        if (currentStock < 0) currentStock = 0; // ป้องกันสต๊อกติดลบ
+                        currentStock -= actionQty;
+                        if (currentStock < 0) currentStock = 0;
                     } else if (action === 'คืนของ') {
-                        currentStock += actionQty; // คืน = บวกกลับเข้าคลัง
+                        currentStock += actionQty;
                     }
 
-                    // อัปเดตตัวเลขใหม่ลงในชีทและกดเซฟ
-                    targetRow.assign({ 'จำนวน': currentStock });
+                    targetRow.set('จำนวน', currentStock); // ใช้ระบบ .set ปลอดภัยที่สุดในการบันทึกข้อมูลหลัก
                     await targetRow.save(); 
                 }
             }
@@ -1178,7 +1196,7 @@ app.post('/webhook', express.json(), async (req, res) => {
                 continue;
             }
 
-            // 📤📥 3. 🎯 ระบบดักรับข้อความพิมพ์ #เบิกของรวม และ #คืนของรวม (แก้ไขอาการของไม่ลงชีท)
+            // 📤📥 3. 🎯 ระบบดักรับข้อความพิมพ์ #เบิกของรวม และ #คืนของรวม (อัปเดตเพิ่มระบบตัดสต๊อก Real-time)
             if (text.startsWith('#เบิกของรวม') || text.startsWith('#คืนของรวม')) {
                 console.log("📦 ตรวจพบรายการเบิก/คืน แบบข้อความตัวอักษร! กำลังประมวลผล...");
                 const isTake = text.startsWith('#เบิกของรวม');
@@ -1213,7 +1231,7 @@ app.post('/webhook', express.json(), async (req, res) => {
 
                 if (itemsList.length === 0) continue;
 
-                // แยกบันทึกลงตามชีทโครงสร้างของพี่เป๊ะๆ 
+                // 1. แยกบันทึกลงตามชีท Log โครงสร้างของพี่ 
                 if (isTake) {
                     const sheet = doc.sheetsByTitle['Log_Takeout'];
                     if (!sheet) { console.error("ไม่พบชีท Log_Takeout"); continue; }
@@ -1232,7 +1250,30 @@ app.post('/webhook', express.json(), async (req, res) => {
                     }
                 }
 
-                // วาดโครงสร้าง Flex Message แจ้งเตือนความสำเร็จในแชทกลุ่ม/เดี่ยว
+                // 🌟 2. เพิ่มเติม: อัปเดตตัดจำนวนสต๊อกในหน้า Inventory ทันที (สำหรับโหมดข้อความพิมพ์ซ้ำ)
+                const invSheet = doc.sheetsByTitle['Inventory'];
+                if (invSheet) {
+                    const invRows = await invSheet.getRows();
+                    for (let item of itemsList) {
+                        const targetRow = invRows.find(r => r.get('รายการ') === item.name);
+                        if (targetRow) {
+                            let currentStock = parseInt(targetRow.get('จำนวน')) || 0;
+                            let actionQty = parseInt(item.qty) || 0;
+
+                            if (isTake) {
+                                currentStock -= actionQty; // เบิก = หักออก
+                                if (currentStock < 0) currentStock = 0;
+                            } else {
+                                currentStock += actionQty; // คืน = บวกเข้าคลัง
+                            }
+
+                            targetRow.set('จำนวน', currentStock);
+                            await targetRow.save();
+                        }
+                    }
+                }
+
+                // 3. วาดโครงสร้าง Flex Message สรุปผล
                 const colorMain = isTake ? '#00246B' : '#dc2626';
                 const icon = isTake ? '📤' : '📥';
                 let itemListHtml = itemsList.map(i => ({
@@ -1252,9 +1293,8 @@ app.post('/webhook', express.json(), async (req, res) => {
                     }
                 };
 
-                // ส่ง Flex message ตอบกลับหาเครื่องเด็กคนกดทันที
                 await client.replyMessage({ replyToken, messages: [flexMsg] });
-                console.log(`✅ บันทึกรายการ${actionName} ลงชีทเรียบร้อยผ่านโหมดสำรอง!`);
+                console.log(`✅ บันทึกรายการ${actionName} และอัปเดตตัดคลัง Inventory เรียบร้อย!`);
                 continue;
             }
         }
