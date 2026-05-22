@@ -1034,15 +1034,15 @@ app.post('/api/liff/procedure', express.json(), async (req, res) => {
         res.status(500).json({ success: false, message: e.message });
     }
 });
+// ==========================================
+// 🤖 LINE WEBHOOK: รองรับระบบประกาศ, เลิกสาย และ คัดกรองของเบิก/คืนแบบพิมพ์ (Fallback)
+// ==========================================
 app.post('/webhook', express.json(), async (req, res) => {
-    console.log("🔥 [WEBHOOK HIT!] ข้อมูลดิบที่ส่งมา:", JSON.stringify(req.body)); 
-    // ... โค้ดระบบประกาศต่างๆ ...
     try {
         const events = req.body.events;
         if (!events || events.length === 0) return res.status(200).send('OK');
 
-        // 🕵️‍♂️ 1. แจ้งเตือนใน Log ว่าบอทได้รับข้อความ
-        console.log("🔥 [WEBHOOK] มีการทักเข้ามาที่บอท!");
+        console.log("🔥 [WEBHOOK] มีข้อมูลวิ่งเข้ามาในแชทบอท!");
 
         const doc = await getSheetDoc();
         const sheet = doc.sheetsByTitle['Master_Data'];
@@ -1057,51 +1057,32 @@ app.post('/webhook', express.json(), async (req, res) => {
             const userId = event.source.userId;
             const replyToken = event.replyToken;
 
-            // 🕵️‍♂️ 2. พิมพ์บอกว่าใครพิมพ์อะไรมา
-            console.log(`💬 ตรวจจับข้อความ: "${text}" | จาก LINE ID: ${userId}`);
+            console.log(`💬 ตรวจจับข้อความพิมพ์: "${text}" | จาก LINE ID: ${userId}`);
 
-            // 📢 ดักจับคำสั่งประกาศ (ใช้ Regex รองรับทั้งพิมพ์ติดและพิมพ์ห่าง เช่น '#ประกาศ' หรือ '# ประกาศ')
+            // 📢 1. ระบบจัดการคำสั่งประกาศกลุ่มภารกิจ (#ประกาศ)
             if (text.match(/^#\s*ประกาศ/)) {
                 console.log("👉 เข้าสู่กระบวนการ #ประกาศ...");
-
-                // ตัดคำว่าประกาศทิ้งให้เหลือแต่ข้อความ
                 const announcement = text.replace(/^#\s*ประกาศ\s*/, '').trim();
-                
                 if (!announcement) {
-                    console.log("❌ ลืมพิมพ์ข้อความ");
                     await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ กรุณาพิมพ์ข้อความที่ต้องการประกาศด้วยครับ เช่น\n#ประกาศ พรุ่งนี้เจอกัน 6 โมง" }] });
                     continue;
                 }
-
-                // หาข้อมูลคนพิมพ์
                 const sender = rows.find(r => r.get('LINE_UID') === userId);
-
                 if (!sender) {
-                    console.log("❌ หาประวัติคนพิมพ์ไม่เจอ (ยังไม่ลงทะเบียน)");
                     await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ ไม่พบประวัติของคุณในระบบ กรุณากดปุ่มลงทะเบียนใน Rich Menu ก่อนครับ" }] });
                     continue;
                 }
-
                 const role = sender.get('Role') ? sender.get('Role').trim() : '';
-                console.log(`👤 คนสั่งคือ: หมอ${sender.get('Nickname')} | ตำแหน่ง: [${role}]`);
-
-                // เช็คสิทธิ์
                 if (role !== 'ผู้นำสาย' && role !== 'หัวหน้า') {
-                    console.log("❌ สิทธิ์ไม่ถึง");
                     await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `❌ ขออภัยครับ สิทธิ์ของคุณคือ '${role}' ไม่ใช่ 'ผู้นำสาย' จึงประกาศไม่ได้ครับ` }] });
                     continue;
                 }
-
                 const myLine = sender.get('Assigned_Line');
                 const myDate = sender.get('Camp_Date');
-                
-                // หาจำนวนเพื่อนร่วมสาย
                 const targets = rows.filter(r => r.get('Assigned_Line') === myLine && r.get('Camp_Date') === myDate && r.get('LINE_UID'));
-                console.log(`🎯 เป้าหมายส่งข้อความ: ${targets.length} คน (สาย: ${myLine}, วันที่: ${myDate})`);
 
                 const flexAnnounce = {
-                    type: "flex",
-                    altText: `📢 ประกาศจากผู้นำสาย: ${myLine}`,
+                    type: "flex", altText: `📢 ประกาศจากผู้นำสาย: ${myLine}`,
                     contents: {
                         type: "bubble",
                         header: { type: "box", layout: "vertical", backgroundColor: "#00246B", contents: [{ type: "text", text: `📢 ประกาศสำคัญประจำ ${myLine}`, color: "#F8B500", weight: "bold", size: "sm" }] },
@@ -1111,21 +1092,16 @@ app.post('/webhook', express.json(), async (req, res) => {
 
                 let successCount = 0;
                 for (let t of targets) {
-                    try { 
-                        await client.pushMessage({ to: t.get('LINE_UID'), messages: [flexAnnounce] }); 
-                        successCount++;
-                    } catch (err) { console.error(`❌ ส่งให้ ${t.get('Nickname')} ไม่สำเร็จ:`, err.message); }
+                    try { await client.pushMessage({ to: t.get('LINE_UID'), messages: [flexAnnounce] }); successCount++; } catch (err) { console.error(err); }
                 }
-
-                console.log(`✅ ส่งประกาศสำเร็จทั้งหมด ${successCount} คน`);
                 await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `✅ บอทได้ส่งประกาศถึงสมาชิกใน ${myLine} จำนวน ${successCount} คน เรียบร้อยแล้วครับ!` }] });
                 continue;
             }
+
             // 🏁 2. ระบบเคลียร์งานปิดฟาร์มประจำวัน (#เลิกสาย)
             if (text.match(/^#\s*เลิกสาย/)) {
                 console.log("👉 เข้าสู่กระบวนการ #เลิกสาย...");
                 const praiseText = text.replace(/^#\s*เลิกสาย\s*/, '').trim();
-
                 const sender = rows.find(r => r.get('LINE_UID') === userId);
                 if (!sender) continue;
 
@@ -1138,7 +1114,6 @@ app.post('/webhook', express.json(), async (req, res) => {
                 const myLine = sender.get('Assigned_Line');
                 const myDate = sender.get('Camp_Date');
 
-                // เช็คว่าเช็คลิสต์เสร็จหมดหรือยัง
                 const checkSheet = doc.sheetsByTitle['Checklist_Status'];
                 const cRows = checkSheet ? await checkSheet.getRows() : [];
                 const incompleteTasks = cRows.filter(r => r.get('Camp_Date') === myDate && r.get('Assigned_Line') === myLine && r.get('Status') !== 'Checked');
@@ -1148,36 +1123,106 @@ app.post('/webhook', express.json(), async (req, res) => {
                     continue;
                 }
 
-                // 🌟 อัปเดตสถานะในชีท Missions_Data ว่า "เลิกสายเรียบร้อย"
                 const mSheet = doc.sheetsByTitle['Missions_Data'];
                 if (mSheet) {
                     const mRows = await mSheet.getRows();
                     const missionRow = mRows.find(r => r.get('Camp_Date') === myDate && r.get('Assigned_Line') === myLine);
-                    if (missionRow) {
-                        missionRow.assign({ 'Line_Status': 'เลิกสายเรียบร้อย' });
-                        await missionRow.save();
+                    if (missionRow) { missionRow.assign({ 'Line_Status': 'เลิกสายเรียบร้อย' }); await missionRow.save(); }
+                }
+
+                const targets = rows.filter(r => r.get('Assigned_Line') === myLine && r.get('Camp_Date') === myDate && r.get('LINE_UID'));
+                for (let t of targets) {
+                    try {
+                        await client.pushMessage({ to: t.get('LINE_UID'), messages: [{ type: 'text', text: `🎉 สิ้นสุดภารกิจ! ผู้นำสายได้ปิดสาย ${myLine} ประจำวันที่ ${myDate} เรียบร้อยแล้ว\n\n💬 ข้อความจากผู้นำสาย: "${praiseText || 'ขอบคุณทุกคนที่เหนื่อยมาด้วยกันครับ!'}"\n\nพักผ่อนให้เต็มที่ครับคุณหมอ! 🌟` }] });
+                    } catch (err) { console.error(err); }
+                }
+                await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `✅ ทำรายการเลิกสาย ${myLine} เรียบร้อย` }] });
+                continue;
+            }
+
+            // 📤📥 3. 🎯 ระบบดักรับข้อความพิมพ์ #เบิกของรวม และ #คืนของรวม (แก้ไขอาการของไม่ลงชีท)
+            if (text.startsWith('#เบิกของรวม') || text.startsWith('#คืนของรวม')) {
+                console.log("📦 ตรวจพบรายการเบิก/คืน แบบข้อความตัวอักษร! กำลังประมวลผล...");
+                const isTake = text.startsWith('#เบิกของรวม');
+                const actionName = isTake ? 'เบิกของ' : 'คืนของ';
+
+                const lines = text.split('\n');
+                let targetDate = ""; let targetLine = ""; let itemsRaw = "";
+
+                lines.forEach(l => {
+                    if (l.startsWith('Date=')) targetDate = l.replace('Date=', '').trim();
+                    if (l.startsWith('Line=')) targetLine = l.replace('Line=', '').trim();
+                    if (l.startsWith('Items=')) itemsRaw = l.replace('Items=', '').trim();
+                });
+
+                if (!targetDate || !targetLine || !itemsRaw) {
+                    console.log("❌ ข้อมูลโครงสร้างข้อความไม่ครบถ้วน");
+                    continue;
+                }
+
+                const sender = rows.find(r => r.get('LINE_UID') === userId);
+                const senderName = sender ? `${sender.get('Nickname')} ${sender.get('Year')}` : "ผู้ปฏิบัติงาน";
+
+                // แตกข้อมูลสิ่งของออกเป็นอาร์เรย์
+                const itemParts = itemsRaw.split(',');
+                let itemsList = [];
+                itemParts.forEach(part => {
+                    const detail = part.split('|');
+                    if (detail.length >= 2) {
+                        itemsList.push({ name: detail[0], qty: parseInt(detail[1]) || 0, unit: detail[2] || 'ชิ้น' });
+                    }
+                });
+
+                if (itemsList.length === 0) continue;
+
+                // แยกบันทึกลงตามชีทโครงสร้างของพี่เป๊ะๆ 
+                if (isTake) {
+                    const sheet = doc.sheetsByTitle['Log_Takeout'];
+                    if (!sheet) { console.error("ไม่พบชีท Log_Takeout"); continue; }
+                    for (let item of itemsList) {
+                        await sheet.addRow({
+                            'Timestamp': new Date().toLocaleString('th-TH'), 'Staff': senderName, 'Item_Name': item.name, 'Amount_Taken': item.qty, 'LINE_ID': userId, 'Status': 'ยังไม่คืน', 'Camp_Date': targetDate, 'Camp_Line': targetLine
+                        });
+                    }
+                } else {
+                    const sheet = doc.sheetsByTitle['Log_Return'];
+                    if (!sheet) { console.error("ไม่พบชีท Log_Return"); continue; }
+                    for (let item of itemsList) {
+                        await sheet.addRow({
+                            'Timestamp': new Date().toLocaleString('th-TH'), 'LINE_ID': userId, 'Item_Name': item.name, 'Amount_Returned': item.qty, 'Amount_Used': 0, 'Unit': item.unit, 'Camp_Date': targetDate, 'Camp_Line': targetLine
+                        });
                     }
                 }
 
-                // ยิงแชทหาลูกทีม
-                const targets = rows.filter(r => r.get('Assigned_Line') === myLine && r.get('Camp_Date') === myDate && r.get('LINE_UID'));
-                let successCount = 0;
-                for (let t of targets) {
-                    try {
-                        await client.pushMessage({
-                            to: t.get('LINE_UID'),
-                            messages: [{ type: 'text', text: `🎉 สิ้นสุดภารกิจ! ผู้นำสายได้ปิดสาย ${myLine} ประจำวันที่ ${myDate} เรียบร้อยแล้ว\n\n💬 ข้อความจากผู้นำสาย: "${praiseText || 'ขอบคุณทุกคนที่เหนื่อยมาด้วยกันครับ!'}"\n\nพักผ่อนให้เต็มที่ครับคุณหมอ! 🌟` }]
-                        });
-                        successCount++;
-                    } catch (err) { console.error(err); }
-                }
-                console.log(`✅ เลิกสายสำเร็จ แจ้งเตือน ${successCount} คน`);
+                // วาดโครงสร้าง Flex Message แจ้งเตือนความสำเร็จในแชทกลุ่ม/เดี่ยว
+                const colorMain = isTake ? '#00246B' : '#dc2626';
+                const icon = isTake ? '📤' : '📥';
+                let itemListHtml = itemsList.map(i => ({
+                    type: "box", layout: "horizontal", margin: "md",
+                    contents: [
+                        { type: "text", text: i.name, size: "sm", color: "#334155", flex: 3, wrap: true },
+                        { type: "text", text: `${i.qty} ${i.unit}`, size: "sm", color: colorMain, weight: "bold", align: "end", flex: 1 }
+                    ]
+                }));
+
+                const flexMsg = {
+                    type: "flex", altText: `แจ้งเตือนทำรายการ${actionName}`,
+                    contents: {
+                        type: "bubble",
+                        header: { type: "box", layout: "vertical", backgroundColor: colorMain, contents: [{ type: "text", text: `${icon} รายการ${actionName}`, color: "#ffffff", weight: "bold", size: "lg" }, { type: "text", text: `ประจำ ${targetLine} (${targetDate})`, color: "#e2e8f0", size: "xs", margin: "sm" }] },
+                        body: { type: "box", layout: "vertical", contents: [{ type: "text", text: `👤 ผู้ทำรายการ: หมอ${senderName}`, size: "xs", color: "#94a3b8", margin: "sm" }, { type: "separator", margin: "md" }, ...itemListHtml] }
+                    }
+                };
+
+                // ส่ง Flex message ตอบกลับหาเครื่องเด็กคนกดทันที
+                await client.replyMessage({ replyToken, messages: [flexMsg] });
+                console.log(`✅ บันทึกรายการ${actionName} ลงชีทเรียบร้อยผ่านโหมดสำรอง!`);
                 continue;
             }
         }
         res.status(200).send('OK');
     } catch (e) {
-        console.error("🚨 Webhook Error แบบเต็มๆ:", e);
+        console.error("🚨 Webhook Error:", e);
         res.status(500).send('Error');
     }
 });
