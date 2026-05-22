@@ -594,14 +594,7 @@ app.get('/api/my-taken-items', async (req, res) => {
     }
 });
 
-// ============================================================================
-// 🤖 MODULE 7: LINE BOT WEBHOOK CHAT HANDLER (ระบบแชทหลักโต้ตอบคำสั่งไลน์)
-// ============================================================================
-app.post('/webhook', line.middleware(middlewareConfig), (req, res) => {
-    Promise.all(req.body.events.map(handleEvent))
-        .then((result) => res.json(result))
-        .catch((err) => { console.error(err); res.status(500).end(); });
-});
+
 
 async function handleEvent(event) {
     if (event.type !== 'message' || event.message.type !== 'text') {
@@ -922,16 +915,10 @@ await client.pushMessage({
     scheduled: true,
     timezone: "Asia/Bangkok" // ตั้งโซนเวลาให้เป็นเวลาไทยเป๊ะๆ
 });
-// ==========================================
-// 🤖 LINE Webhook: ระบบลงทะเบียนสายปฏิบัติการ
-// ==========================================
-// ==========================================
-// 🤖 LINE Webhook: ระบบลงทะเบียนสายปฏิบัติการ
-// ==========================================
-// ==========================================
-// 🤖 LINE WEBHOOK: ระบบบอทรับคำสั่ง (#ประกาศ)
-// ==========================================
+
 app.post('/webhook', express.json(), async (req, res) => {
+    console.log("🔥 [WEBHOOK HIT!] ข้อมูลดิบที่ส่งมา:", JSON.stringify(req.body)); 
+    // ... โค้ดระบบประกาศต่างๆ ...
     try {
         const events = req.body.events;
         if (!events || events.length === 0) return res.status(200).send('OK');
