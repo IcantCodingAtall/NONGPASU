@@ -1028,25 +1028,76 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
 // ==========================================
 // 📝 API 3: บันทึกหัตถการ & ส่งเข้าแชทส่วนตัว + แชทกลุ่มผ่าน env
 // ==========================================
+// ==========================================
+// 📝 API 3: บันทึกหัตถการ & แก้ไขคำว่า undefined ให้กลายเป็นเลข 0
+// ==========================================
 app.post('/api/liff/procedure', express.json(), async (req, res) => {
     try {
-        const { lineId, staffName, date, line, ownerName, ownerPhone, ownerAddress, cows, buffs, goats, sheeps, fmd, lsd, edta, clot, iver, alben, chloro, dexam, vitb } = req.body;
+        // 🧹 ฟังก์ชันกรองตัวแปร: บังคับให้เป็นตัวเลข ถ้าหาไม่เจอให้เป็น 0
+        const cleanNum = (v) => parseInt(v) || 0;
+        // 🧹 ฟังก์ชันกรองข้อความ: ถ้าหาไม่เจอให้เป็นค่า Default
+        const cleanStr = (v, def) => (v === undefined || v === null || String(v).trim() === '') ? def : String(v).trim();
+
+        // 🎯 ดึงตัวแปรให้ตรงกับที่หน้าเว็บส่งมาเป๊ะๆ
+        const lineId = req.body.lineId;
+        const staffName = cleanStr(req.body.staffName, 'ผู้ปฏิบัติงาน');
+        const date = cleanStr(req.body.date, '-');
+        const line = cleanStr(req.body.line, '-');
+        const ownerName = cleanStr(req.body.ownerName, 'ไม่ระบุ');
+        const ownerPhone = cleanStr(req.body.ownerPhone, '-');
+        const ownerAddress = cleanStr(req.body.ownerAddress, '-');
         
+        const cows = cleanNum(req.body.cows);
+        const buffs = cleanNum(req.body.buffs);
+        const goats = cleanNum(req.body.goats);
+        const sheeps = cleanNum(req.body.sheeps);
+        const fmd = cleanNum(req.body.fmd);
+        const lsd = cleanNum(req.body.lsd);
+        const edta = cleanNum(req.body.edta); // หลอดเลือด EDTA
+        const clot = cleanNum(req.body.clot); // หลอดเลือด Clot
+        const iver = cleanNum(req.body.iver);
+        const alben = cleanNum(req.body.alben);
+        const chloro = cleanNum(req.body.chloro);
+        const dexam = cleanNum(req.body.dexam);
+        const vitb = cleanNum(req.body.vitb); // วิตามินบี
+
         const doc = await getSheetDoc();
+        // รองรับทั้ง 2 ชื่อแท็บ ป้องกันหาไม่เจอ
         const sheet = doc.sheetsByTitle['Log_Procedures'] || doc.sheetsByTitle['Procedure_Log'];
+        
         if (sheet) {
-            await sheet.addRow({ 'Timestamp': new Date().toLocaleString('th-TH'), 'Staff_Name': staffName, 'Camp_Date': date, 'Assigned_Line': line, 'Owner_Name': ownerName, 'Cow': cows, 'Buff': buffs, 'Goat': goats, 'Sheep': sheeps, 'FMD': fmd, 'LSD': lsd, 'EDTA': edta, 'Clot': clot, 'Iver': iver, 'Alben': alben, 'Chloro': chloro, 'Dexam': dexam, 'VitB': vitb });
+            // เซฟลง Google Sheet
+            await sheet.addRow({ 
+                'Timestamp': new Date().toLocaleString('th-TH'), 
+                'Staff_Name': staffName, 
+                'Camp_Date': date, 
+                'Assigned_Line': line, 
+                'Owner_Name': ownerName, 
+                'Cow': cows, 
+                'Buff': buffs, 
+                'Goat': goats, 
+                'Sheep': sheeps, 
+                'FMD': fmd, 
+                'LSD': lsd, 
+                'EDTA': edta, 
+                'Clot': clot, 
+                'Iver': iver, 
+                'Alben': alben, 
+                'Chloro': chloro, 
+                'Dexam': dexam, 
+                'VitB': vitb 
+            });
         }
 
-        const safeNum = (val) => parseInt(val) || 0;
-        const totalAnim = safeNum(cows) + safeNum(buffs) + safeNum(goats) + safeNum(sheeps);
-        const totalBlood = safeNum(edta) + safeNum(clot);
+        // คำนวณยอดรวม
+        const totalAnim = cows + buffs + goats + sheeps;
         
         const othersArr = [];
-        if (safeNum(chloro) > 0) othersArr.push(`Chloro (${chloro})`);
-        if (safeNum(dexam) > 0) othersArr.push(`Dexam (${dexam})`);
+        if (chloro > 0) othersArr.push(`Chloro (${chloro})`);
+        if (dexam > 0) othersArr.push(`Dexam (${dexam})`);
         const othersStr = othersArr.length > 0 ? othersArr.join(', ') : '-';
 
+        // 🎨 สร้าง Flex Message (จัดรูปแบบใหม่ เปลี่ยน Blood/Feces เป็น Blood Tubes ให้ตรงกับความเป็นจริง)
         const flexMsg = {
             type: "flex", altText: `ยอดหัตถการ ${line}`,
             contents: {
@@ -1055,35 +1106,36 @@ app.post('/api/liff/procedure', express.json(), async (req, res) => {
                 body: {
                     type: "box", layout: "vertical",
                     contents: [
-                        { type: "text", text: `👤 Owner: ${ownerName || 'ไม่ระบุ'}`, weight: "bold", size: "md", color: "#00246B" },
-                        { type: "text", text: `📍 ที่อยู่: ${ownerAddress || '-'} | 📞 โทร: ${ownerPhone || '-'}`, size: "xs", color: "#64748b", margin: "sm" },
+                        { type: "text", text: `👤 Owner: ${ownerName}`, weight: "bold", size: "md", color: "#00246B" },
+                        { type: "text", text: `📍 ที่อยู่: ${ownerAddress} | 📞 โทร: ${ownerPhone}`, size: "xs", color: "#64748b", margin: "sm" },
                         { type: "separator", margin: "md" },
                         { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "Total Animals", size: "sm", color: "#334155", weight: "bold" }, { type: "text", text: `${totalAnim} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
-                        { type: "text", text: `วัว:${safeNum(cows)} | ควาย:${safeNum(buffs)} | แพะ:${safeNum(goats)} | แกะ:${safeNum(sheeps)}`, size: "xs", color: "#94a3b8", margin: "sm" },
+                        { type: "text", text: `วัว:${cows} | ควาย:${buffs} | แพะ:${goats} | แกะ:${sheeps}`, size: "xs", color: "#94a3b8", margin: "sm" },
                         { type: "separator", margin: "md" },
-                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "💉 Blood Tubes", size: "sm", color: "#334155" }, { type: "text", text: `${totalBlood} หลอด`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
-                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "🦠 FMD / LSD", size: "sm", color: "#334155" }, { type: "text", text: `${safeNum(fmd)} / ${safeNum(lsd)} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
-                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "💊 Iver / Alben", size: "sm", color: "#334155" }, { type: "text", text: `${safeNum(iver)} / ${safeNum(alben)} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
-                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "🧪 Vitamin B", size: "sm", color: "#334155" }, { type: "text", text: `${safeNum(vitb)} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
+                        
+                        // 👇 จุดที่เคยขึ้น undefined แก้เป็นยอดหลอดเลือด EDTA และ Clot ที่ถูกต้อง
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "💉 Blood (EDTA/Clot)", size: "sm", color: "#334155" }, { type: "text", text: `${edta} / ${clot} หลอด`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
+                        
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "🦠 FMD / LSD", size: "sm", color: "#334155" }, { type: "text", text: `${fmd} / ${lsd} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "💊 Iver / Alben", size: "sm", color: "#334155" }, { type: "text", text: `${iver} / ${alben} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
+                        
+                        // 👇 จุดที่เคยขึ้น undefined แก้เป็น Vitamin B (vitb)
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "🧪 Vitamin B", size: "sm", color: "#334155" }, { type: "text", text: `${vitb} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
+                        
                         { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "📌 Others", size: "sm", color: "#334155" }, { type: "text", text: othersStr, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
-                        { type: "text", text: `Recorded by: ${staffName}`, size: "xxs", color: "#cbd5e1", align: "end", margin: "lg" }
+                        { type: "text", text: `Recorded by: หมอ${staffName}`, size: "xxs", color: "#cbd5e1", align: "end", margin: "lg" }
                     ]
                 }
             }
         };
 
-        // 1. ส่งให้คนคีย์รายงานเข้าแชทเดี่ยว
+        // 1. ยิงเข้าแชทส่วนตัวคนกรอก
         try { await client.pushMessage({ to: lineId, messages: [flexMsg] }); } catch(e) {}
         
-        // 🌟 2. ดึงไอดีกลุ่มจาก Environment Variable แล้วสั่งยิงสำเนายอดหัตถการเข้ากลุ่มไลน์ปศุสัตว์
+        // 2. ยิงเข้ากลุ่มไลน์ปศุสัตว์
         const groupId = process.env.LINE_GROUP_ID;
-        if (groupId) {
-            try { 
-                await client.pushMessage({ to: groupId, messages: [flexMsg] }); 
-                console.log("✅ ยิงรายงานหัตถการเข้าไลน์กลุ่มเรียบร้อย");
-            } catch(err) { 
-                console.error("🚨 ยิงหัตถการเข้ากลุ่มไม่สำเร็จ:", err.message); 
-            }
+        if (groupId) { 
+            try { await client.pushMessage({ to: groupId, messages: [flexMsg] }); } catch(err) {} 
         }
 
         res.json({ success: true });
