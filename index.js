@@ -1003,6 +1003,59 @@ app.post('/webhook', express.json(), async (req, res) => {
                 await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `✅ บอทได้ส่งประกาศถึงสมาชิกใน ${myLine} จำนวน ${successCount} คน เรียบร้อยแล้วครับ!` }] });
                 continue;
             }
+            // 🏁 2. ระบบเคลียร์งานปิดฟาร์มประจำวัน (#เลิกสาย)
+            if (text.match(/^#\s*เลิกสาย/)) {
+                console.log("👉 เข้าสู่กระบวนการ #เลิกสาย...");
+                const praiseText = text.replace(/^#\s*เลิกสาย\s*/, '').trim();
+
+                const sender = rows.find(r => r.get('LINE_UID') === userId);
+                if (!sender) continue;
+
+                const role = sender.get('Role') ? sender.get('Role').trim() : '';
+                if (role !== 'ผู้นำสาย' && role !== 'หัวหน้า') {
+                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ เฉพาะผู้นำสายเท่านั้นที่ทำรายการเลิกสายได้ครับ" }] });
+                    continue;
+                }
+
+                const myLine = sender.get('Assigned_Line');
+                const myDate = sender.get('Camp_Date');
+
+                // เช็คว่าเช็คลิสต์เสร็จหมดหรือยัง
+                const checkSheet = doc.sheetsByTitle['Checklist_Status'];
+                const cRows = checkSheet ? await checkSheet.getRows() : [];
+                const incompleteTasks = cRows.filter(r => r.get('Camp_Date') === myDate && r.get('Assigned_Line') === myLine && r.get('Status') !== 'Checked');
+
+                if (incompleteTasks.length > 0) {
+                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `❌ ยังเลิกสายไม่ได้ครับ! ตรวจพบเช็คลิสต์ค้างอีก ${incompleteTasks.length} รายการ กรุณาไปติ๊กในหน้าเว็บให้ครบก่อนครับ` }] });
+                    continue;
+                }
+
+                // 🌟 อัปเดตสถานะในชีท Missions_Data ว่า "เลิกสายเรียบร้อย"
+                const mSheet = doc.sheetsByTitle['Missions_Data'];
+                if (mSheet) {
+                    const mRows = await mSheet.getRows();
+                    const missionRow = mRows.find(r => r.get('Camp_Date') === myDate && r.get('Assigned_Line') === myLine);
+                    if (missionRow) {
+                        missionRow.assign({ 'Line_Status': 'เลิกสายเรียบร้อย' });
+                        await missionRow.save();
+                    }
+                }
+
+                // ยิงแชทหาลูกทีม
+                const targets = rows.filter(r => r.get('Assigned_Line') === myLine && r.get('Camp_Date') === myDate && r.get('LINE_UID'));
+                let successCount = 0;
+                for (let t of targets) {
+                    try {
+                        await client.pushMessage({
+                            to: t.get('LINE_UID'),
+                            messages: [{ type: 'text', text: `🎉 สิ้นสุดภารกิจ! ผู้นำสายได้ปิดสาย ${myLine} ประจำวันที่ ${myDate} เรียบร้อยแล้ว\n\n💬 ข้อความจากผู้นำสาย: "${praiseText || 'ขอบคุณทุกคนที่เหนื่อยมาด้วยกันครับ!'}"\n\nพักผ่อนให้เต็มที่ครับคุณหมอ! 🌟` }]
+                        });
+                        successCount++;
+                    } catch (err) { console.error(err); }
+                }
+                console.log(`✅ เลิกสายสำเร็จ แจ้งเตือน ${successCount} คน`);
+                continue;
+            }
         }
         res.status(200).send('OK');
     } catch (e) {
@@ -1347,7 +1400,8 @@ app.get('/api/all-missions', async (req, res) => {
                 image: mData ? mData.get('Image_URL') : "", // 🖼️ ดึงรูปจากคอลัมน์ Image_URL
                 progress: progress || 0,
                 leader: leader,   // 👑 ส่งข้อมูลหัวหน้า
-                members: members  // 👥 ส่งข้อมูลลูกทีม
+                members: members,  // 👥 ส่งข้อมูลลูกทีม
+                lineStatus: mData ? (mData.get('Line_Status') || "") : ""
             };
         });
 

@@ -484,14 +484,26 @@
                     currentFetchedMissions = data.missions;
                     let html = '';
                     data.missions.forEach((m, idx) => {
+                        // เช็คสถานะเพื่อสร้างป้ายกำกับและปรับสี
+                        const isDone = (m.lineStatus === 'เลิกสายเรียบร้อย');
+                        const statusBadge = isDone 
+                            ? `<span class="text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold shadow-sm border border-red-200">🎉 เลิกสายเรียบร้อย</span>` 
+                            : `<span class="text-[9px] bg-blue-50 text-[#00246B] px-1.5 py-0.5 rounded font-bold shadow-sm border border-blue-100">กำลังปฏิบัติงาน</span>`;
+                        
+                        const cardBorder = isDone ? 'border-l-red-500 opacity-80' : 'border-l-[#00246B]';
+                        const textProgColor = isDone ? 'text-red-500' : 'text-[#00246B]';
+
                         html += `
-                        <div onclick="selectTeamMission(${idx})" class="mu-card bg-white flex justify-between items-center cursor-pointer border-l-4 border-l-[#00246B] hover:bg-slate-50 transition-colors shadow-sm">
+                        <div onclick="selectTeamMission(${idx})" class="mu-card bg-white flex justify-between items-center cursor-pointer border-l-4 ${cardBorder} hover:bg-slate-50 transition-colors shadow-sm mb-3">
                             <div>
                                 <h4 class="font-bold text-sm text-[#00246B]">${m.line} ${m.line === userProfile.assignedLine ? '<span class="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded ml-1 font-bold shadow-sm">ทีมเรา</span>' : ''}</h4>
-                                <p class="text-[10px] text-slate-400 mt-0.5">📍 ${m.location}</p>
+                                <div class="flex items-center gap-2 mt-1.5">
+                                    <p class="text-[10px] text-slate-400">📍 ${m.location}</p>
+                                    ${statusBadge}
+                                </div>
                             </div>
                             <div class="text-right">
-                                <span class="text-xs font-bold text-[#00246B]">${m.progress}%</span>
+                                <span class="text-xs font-bold ${textProgColor}">${m.progress}%</span>
                             </div>
                         </div>`;
                     });
