@@ -972,13 +972,16 @@ app.post('/webhook', express.json(), async (req, res) => {
 
             // --- ส่วนประกาศ ---
             if (text.startsWith('#ประกาศ ')) {
-                const announcement = text.replace('#ประกาศ ', '').trim();
-                const sender = rows.find(r => r.get('LINE_UID') === userId);
+    const announcement = text.replace('#ประกาศ ', '').trim();
+    const sender = rows.find(r => r.get('LINE_UID') === userId);
 
-                if (!sender || (sender.get('Role') !== 'ผู้นำสาย' && sender.get('Role') !== 'หัวหน้า')) {
-                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ เฉพาะผู้นำสายเท่านั้นที่ประกาศได้" }] });
-                    continue;
-                }
+    // 🚨 เพิ่มบรรทัดนี้เพื่อดูใน Logs ของ Render ว่าระบบมองเห็นพี่เป็นตำแหน่งอะไร
+    console.log(`🕵️‍♂️ ตรวจพบคำสั่งประกาศจากชื่อ: ${sender ? sender.get('Nickname') : 'ไม่พบชื่อ'} | สิทธิ์: ${sender ? sender.get('Role') : 'ไม่มีสิทธิ์'}`);
+
+    if (!sender || (sender.get('Role') !== 'ผู้นำสาย' && sender.get('Role') !== 'หัวหน้า')) {
+        await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ เฉพาะผู้นำสายเท่านั้นที่สามารถประกาศได้" }] });
+        continue;
+    }
 
                 const myLine = sender.get('Assigned_Line');
                 const myDate = sender.get('Camp_Date');
