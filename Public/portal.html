@@ -649,15 +649,48 @@
             document.getElementById('invContainer').innerHTML = '';
             
             try {
-                const url = isReturnMode ? `/api/my-taken-items?userId=${myLineId}` : '/api/inventory';
-                const res = await fetch(url);
-                const data = await res.json();
+                let rawItems = [];
+
+                if (isReturnMode) {
+                    // 🌟 ดึงข้อมูลค้างเบิกของทุกคน แล้วเอามารวมกันเฉพาะสายตัวเอง
+                    const res = await fetch('/api/dashboard');
+                    const data = await res.json();
+                    const allBorrows = data.activeBorrows || [];
+                    
+                    // กรองเอาเฉพาะคนที่อยู่ในสายเดียวกัน และวันที่เดียวกัน
+                    const teamBorrows = allBorrows.filter(b => b.line === userProfile.assignedLine && b.date === userProfile.campDate);
+                    
+                    // รวมไอเทมที่เหมือนกันเข้าด้วยกัน (เผื่อ A เบิก Syringe 5, B เบิก 5 จะรวมเป็น 10)
+                    let aggregatedItems = {};
+                    teamBorrows.forEach(userBorrow => {
+                        userBorrow.items.forEach(item => {
+                            if (!aggregatedItems[item.name]) {
+                                aggregatedItems[item.name] = { 
+                                    name: item.name, 
+                                    stock: 0, 
+                                    unit: item.unit || 'ชิ้น', 
+                                    image: item.image || '' 
+                                };
+                            }
+                            aggregatedItems[item.name].stock += parseInt(item.qty);
+                        });
+                    });
+                    
+                    rawItems = Object.values(aggregatedItems);
+
+                } else {
+                    // โหมดเบิกของ ดึงคลังสินค้าปกติ
+                    const res = await fetch('/api/inventory');
+                    const data = await res.json();
+                    rawItems = Array.isArray(data) ? data : [];
+                }
                 
-                let rawItems = isReturnMode ? (data.items || []) : (Array.isArray(data) ? data : []);
                 document.getElementById('invLoading').classList.add('hidden');
                 
                 if(rawItems.length === 0) {
-                    document.getElementById('invEmpty').innerText = isReturnMode ? "🎉 คืนครบแล้ว ไม่มีค้าง" : "กล่องอุปกรณ์ว่างเปล่า";
+                    document.getElementById('invEmpty').innerHTML = isReturnMode 
+                        ? "🎉 ทีมเราไม่มีของค้างเบิกแล้ว เยี่ยมมาก!" 
+                        : "กล่องอุปกรณ์ว่างเปล่า";
                     document.getElementById('invEmpty').classList.remove('hidden');
                 } else {
                     inventoryData = rawItems.map((item, idx) => ({ ...item, selectedQty: 0, _idx: idx }));
