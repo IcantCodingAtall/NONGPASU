@@ -511,22 +511,29 @@ app.post('/api/liff/lab', async (req, res) => {
 // ============================================================================
 
 // 1. ช่องทางส่งข้อมูลสต็อกคลังอุปกรณ์ทั้งหมดไปดึงขึ้นหน้าเว็บบราวเซอร์พอร์ทัล
+// ==========================================
+// 📦 API ดึงข้อมูลคลังสินค้ามาโชว์ในเว็บ
+// ==========================================
 app.get('/api/inventory', async (req, res) => {
     try {
-        const doc = await getSheetDoc(); 
-        const invSheet = doc.sheetsByIndex[0]; 
-        const rows = await invSheet.getRows();
+        const doc = await getSheetDoc();
+        const sheet = doc.sheetsByTitle['Inventory'];
+        if (!sheet) return res.json([]);
         
-        const data = rows.map(row => ({ 
-            name: row.get('Item_Name') || row.get('รายการ') || '', 
-            stock: parseInt(row.get('Stock') || row.get('จำนวน')) || 0, 
-            unit: row.get('Unit') || row.get('ลักษณนาม') || '', 
-            image: row.get('Image_URL') || row.get('รูปภาพ') || '' // 🆕 เพิ่มให้ดึงลิงก์รูปภาพจากชีท
-        })).filter(item => item.name !== ''); 
+        const rows = await sheet.getRows();
         
-        res.json(data);
-    } catch (error) { 
-        res.status(500).json({ error: 'โหลดล้มเหลว' }); 
+        // ดึงให้ตรงกับชื่อหัวคอลัมน์ในชีทเป๊ะๆ: 'รายการ', 'จำนวน', 'Unit', 'Image_URL'
+        const inventoryList = rows.map(r => ({
+            name: r.get('รายการ') || 'ไม่ทราบชื่อ',
+            stock: parseInt(r.get('จำนวน')) || 0,
+            unit: r.get('Unit') || 'ชิ้น',
+            image: r.get('Image_URL') || 'https://cdn-icons-png.flaticon.com/512/1516/1516104.png'
+        }));
+        
+        res.json(inventoryList);
+    } catch(e) {
+        console.error("Fetch Inventory Error:", e);
+        res.status(500).json([]);
     }
 });
 
@@ -903,11 +910,15 @@ app.get('/api/team-taken-items', async (req, res) => {
 // ==========================================
 // 📦 API 2: บันทึกการเบิก/คืน และส่ง Flex Message
 // ==========================================
+// ==========================================
+// 📦 API 2: บันทึกการเบิก/คืน, ตัดสต๊อก Real-time และส่ง Flex Message
+// ==========================================
 app.post('/api/inventory-action', express.json(), async (req, res) => {
     try {
         const { lineId, staffName, date, line, action, items } = req.body;
         const doc = await getSheetDoc();
 
+        // 1. บันทึกลง Log (Takeout / Return)
         if (action === 'เบิกของ') {
             const sheet = doc.sheetsByTitle['Log_Takeout'];
             if (!sheet) throw new Error("ไม่พบแท็บ Log_Takeout");
@@ -932,7 +943,7 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
                     'LINE_ID': lineId,
                     'Item_Name': item.name,
                     'Amount_Returned': item.qty,
-                    'Amount_Used': 0, // ค่าเริ่มต้น
+                    'Amount_Used': 0, 
                     'Unit': item.unit,
                     'Camp_Date': date,
                     'Camp_Line': line
@@ -940,7 +951,34 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
             }
         }
 
-        // --- สร้าง Flex Message เบิก/คืน ---
+        // 🌟 2. ระบบตัด/เพิ่มสต๊อกในหน้า Inventory (Real-time) 🌟
+        const invSheet = doc.sheetsByTitle['Inventory'];
+        if (invSheet) {
+            const invRows = await invSheet.getRows();
+            
+            for (let item of items) {
+                // ค้นหาแถวใน Inventory ที่ชื่ออุปกรณ์ตรงกัน (อ้างอิงคอลัมน์ 'รายการ')
+                const targetRow = invRows.find(r => r.get('รายการ') === item.name);
+                
+                if (targetRow) {
+                    let currentStock = parseInt(targetRow.get('จำนวน')) || 0;
+                    let actionQty = parseInt(item.qty) || 0;
+
+                    if (action === 'เบิกของ') {
+                        currentStock -= actionQty; // เบิก = หักออก
+                        if (currentStock < 0) currentStock = 0; // ป้องกันสต๊อกติดลบ
+                    } else if (action === 'คืนของ') {
+                        currentStock += actionQty; // คืน = บวกกลับเข้าคลัง
+                    }
+
+                    // อัปเดตตัวเลขใหม่ลงในชีทและกดเซฟ
+                    targetRow.assign({ 'จำนวน': currentStock });
+                    await targetRow.save(); 
+                }
+            }
+        }
+
+        // 3. --- สร้าง Flex Message เบิก/คืน ---
         const colorMain = action === 'เบิกของ' ? '#00246B' : '#dc2626'; 
         const icon = action === 'เบิกของ' ? '📤' : '📥';
         
@@ -963,7 +1001,7 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
                         { type: "text", text: `ประจำ ${line} (${date})`, color: "#e2e8f0", size: "xs", margin: "sm" }
                     ]
                 },
-                body: { type: "box", layout: "vertical", contents: [{ type: "text", text: `👤 ผู้ทำรายการ: ${staffName}`, size: "xs", color: "#94a3b8", margin: "sm" }, { type: "separator", margin: "md" }, ...itemListHtml] }
+                body: { type: "box", layout: "vertical", contents: [{ type: "text", text: `👤 ผู้ทำรายการ: หมอ${staffName}`, size: "xs", color: "#94a3b8", margin: "sm" }, { type: "separator", margin: "md" }, ...itemListHtml] }
             }
         };
 
