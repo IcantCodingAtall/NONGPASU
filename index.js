@@ -1048,12 +1048,13 @@ app.post('/api/register-user', express.json(), async (req, res) => {
         await foundUser.save();
 
         // ---------------------------------------------------------
-        // 🌟 เพิ่มเติม: ดึงรายชื่อเพื่อนร่วมสายทั้งหมดเพื่อทำ Flex Message แบบใหม่
+        // 🌟 อัปเดต: แยกผู้นำสาย และ สมาชิก พร้อมเช็คสถานะ ✅/❌
         // ---------------------------------------------------------
         const myLineName = foundUser.get('Assigned_Line');
         const myCampDate = foundUser.get('Camp_Date');
         
-        let memberBoxes = [];
+        let leaderContents = [];
+        let memberContents = [];
 
         // วนลูปหาคนที่อยู่สายเดียวกันและวันเดียวกัน
         for (let row of rows) {
@@ -1062,22 +1063,37 @@ app.post('/api/register-user', express.json(), async (req, res) => {
                 const role = row.get('Role');
                 const isLeader = (role === 'ผู้นำสาย' || role === 'หัวหน้า');
                 
-                // รูปแบบชื่อ: หมอเอิร์ท ปี4 (ผู้นำสาย)
-                const memberText = `หมอ${row.get('Nickname')} ${row.get('Year')} ${isLeader ? '(ผู้นำสาย)' : ''}`;
+                const nameStr = `หมอ${row.get('Nickname')} (ปี ${row.get('Year')})`;
+                const statusIcon = isRegistered ? "✅" : "❌";
+                const textColor = isRegistered ? "#16a34a" : "#ef4444"; // เขียว / แดง
+                const textWeight = isRegistered ? "regular" : "bold";
                 
-                memberBoxes.push({
-                    type: "text",
-                    text: isRegistered ? `✅ ${memberText}` : `❌ ${memberText}`,
-                    size: "sm",
-                    color: isRegistered ? "#16a34a" : "#ef4444", // สีเขียวถ้าลงแล้ว สีแดงถ้ายังไม่ลง
-                    weight: isRegistered ? "regular" : "bold", // ถ้ายังไม่ลงให้ตัวหนาจะได้เด่นๆ
-                    margin: "sm",
-                    wrap: true
-                });
+                // คัดแยกกลุ่ม ผู้นำสาย vs สมาชิก
+                if (isLeader) {
+                    leaderContents.push({
+                        type: "text",
+                        text: `${statusIcon} 👑 ${nameStr}`,
+                        size: "sm",
+                        color: textColor,
+                        weight: textWeight,
+                        wrap: true,
+                        margin: "sm"
+                    });
+                } else {
+                    memberContents.push({
+                        type: "text",
+                        text: `${statusIcon} 👤 ${nameStr}`,
+                        size: "sm",
+                        color: textColor,
+                        weight: textWeight,
+                        wrap: true,
+                        margin: "sm"
+                    });
+                }
             }
         }
 
-        // สร้าง Flex Message สรุปยอด
+        // 🎨 3. สร้าง Flex Message แบบแยกโซน ผู้นำสาย กับ สมาชิก
         const flexMsg = {
             type: "flex",
             altText: `สรุปข้อมูล ${myLineName} วันที่ ${myCampDate}`,
@@ -1097,8 +1113,16 @@ app.post('/api/register-user', express.json(), async (req, res) => {
                     type: "box",
                     layout: "vertical",
                     contents: [
-                        { type: "text", text: "รายชื่อสมาชิกในสาย:", weight: "bold", size: "md", color: "#00246B", margin: "sm" },
-                        ...memberBoxes, // เอาชื่อที่ลิสต์ไว้มาหยอดใส่ตรงนี้
+                        // --- โซนหัวหน้า ---
+                        { type: "text", text: "ผู้นำสายปฏิบัติการ", weight: "bold", size: "xs", color: "#94a3b8", margin: "sm" },
+                        ...(leaderContents.length > 0 ? leaderContents : [{ type: "text", text: "- รอข้อมูลผู้นำสาย -", size: "sm", color: "#cbd5e1", margin: "sm" }]),
+                        
+                        { type: "separator", margin: "lg" },
+                        
+                        // --- โซนสมาชิก ---
+                        { type: "text", text: "สมาชิกผู้ปฏิบัติงาน", weight: "bold", size: "xs", color: "#94a3b8", margin: "lg" },
+                        ...(memberContents.length > 0 ? memberContents : [{ type: "text", text: "- ยังไม่มีสมาชิก -", size: "sm", color: "#cbd5e1", margin: "sm" }]),
+                        
                         { type: "separator", margin: "lg" }
                     ]
                 },
@@ -1112,7 +1136,7 @@ app.post('/api/register-user', express.json(), async (req, res) => {
                             color: "#F8B500",
                             action: {
                                 type: "uri",
-                                label: "🎯 เปิดหน้าภารกิจ",
+                                label: "🎯 เปิดหน้า PORTAL",
                                 uri: "https://liff.line.me/2010125977-E8l1g7Zp" 
                             }
                         }
@@ -1132,7 +1156,7 @@ app.post('/api/register-user', express.json(), async (req, res) => {
             console.error("🚨 ส่ง Flex Message ไม่สำเร็จ:", pushErr);
         }
 
-        // 3. ส่งข้อมูลกลับไปให้หน้าเว็บ LIFF เพื่อเปิดล็อก Dashboard
+        // 4. ส่งข้อมูลกลับไปให้หน้าเว็บ LIFF เพื่อเปิดล็อก Dashboard
         res.json({
             success: true,
             profile: {
