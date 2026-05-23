@@ -209,11 +209,13 @@ app.post('/api/presence', (req, res) => {
 // ==========================================
 // 📊 API 4: ดึงข้อมูล Dashboard (ซ่อมบัคหน่วย Undefined + ตัดยอดค้างเมื่อคืนแล้ว)
 // ==========================================
+// ==========================================
+// 📊 API 4: ดึงข้อมูล Dashboard (ล้างบัคเว้นวรรค + คำนวณค้างเบิกเป๊ะ 100%)
+// ==========================================
 app.get('/api/dashboard', async (req, res) => {
     try {
         const doc = await getSheetDoc();
         
-        // 1. ค้นหายอดประชากรสัตว์ในวันนั้น
         const pLogSheet = doc.sheetsByTitle['Log_Procedures'] || doc.sheetsByTitle['Procedure_Log'];
         const pRows = pLogSheet ? await pLogSheet.getRows() : [];
         let animals = { 'วัว': 0, 'ควาย': 0, 'แพะ': 0, 'แกะ': 0 };
@@ -236,17 +238,16 @@ app.get('/api/dashboard', async (req, res) => {
             }
         });
 
-        // 🌟 2. ดึงข้อมูลหน่วย (Unit) จากหน้า Inventory มาเก็บไว้ในคลังสมอง
         const invSheet = doc.sheetsByTitle['Inventory'];
         const invRows = invSheet ? await invSheet.getRows() : [];
         let unitMap = {};
         invRows.forEach(r => {
-            const itemName = r.get('รายการ') ? r.get('รายการ').trim() : '';
-            const unit = r.get('Unit') ? r.get('Unit').trim() : 'ชิ้น';
+            const itemName = (r.get('รายการ') || '').trim(); // 🚨 เพิ่ม .trim()
+            const unit = (r.get('Unit') || '').trim() || 'ชิ้น';
             if(itemName) unitMap[itemName] = unit;
         });
 
-        // 🌟 3. คำนวณค้างเบิกแบบ Real-time
+        // 🌟 คำนวณค้างเบิกด้วยคณิตศาสตร์ (เอาเบิกทั้งหมด ลบด้วย คืนทั้งหมด ป้องกันบัค Status)
         const takeoutSheet = doc.sheetsByTitle['Log_Takeout'];
         const returnSheet = doc.sheetsByTitle['Log_Return'];
         
@@ -256,24 +257,16 @@ app.get('/api/dashboard', async (req, res) => {
         let lineItemsTrack = {};
 
         tRows.forEach(r => {
-            // 🚨 ข้ามของที่คืนแล้ว (ป้องกันบัคยอดค้าง)
-            if (r.get('Status') === 'คืนแล้ว') return; 
-
             const line = r.get('Camp_Line');
             const date = r.get('Camp_Date');
-            const name = r.get('Item_Name') ? r.get('Item_Name').trim() : '';
+            const name = (r.get('Item_Name') || '').trim(); // 🚨 เพิ่ม .trim()
             const qty = parseInt(r.get('Amount_Taken')) || 0;
             const staff = r.get('Staff') || "ผู้ปฏิบัติงาน";
-            
-            // 🎯 ดึงหน่วยจากคลังสมองมาประกบ ถ้าหาไม่เจอให้ใช้คำว่า 'ชิ้น'
             const unit = unitMap[name] || 'ชิ้น'; 
 
             if (qty > 0 && line && date) {
                 const key = `${line}_${date}_${name}`;
-                if (!lineItemsTrack[key]) {
-                    // แปะหน่วย (unit) เตรียมส่งไปให้หน้าเว็บ
-                    lineItemsTrack[key] = { line, date, name, qty: 0, staff, unit }; 
-                }
+                if (!lineItemsTrack[key]) lineItemsTrack[key] = { line, date, name, qty: 0, staff, unit }; 
                 lineItemsTrack[key].qty += qty;
             }
         });
@@ -281,35 +274,28 @@ app.get('/api/dashboard', async (req, res) => {
         rRows.forEach(r => {
             const line = r.get('Camp_Line');
             const date = r.get('Camp_Date');
-            const name = r.get('Item_Name') ? r.get('Item_Name').trim() : '';
+            const name = (r.get('Item_Name') || '').trim(); // 🚨 เพิ่ม .trim()
             const qty = parseInt(r.get('Amount_Returned')) || 0;
 
             if (qty > 0 && line && date) {
                 const key = `${line}_${date}_${name}`;
-                if (lineItemsTrack[key]) {
-                    lineItemsTrack[key].qty -= qty; 
-                }
+                if (lineItemsTrack[key]) lineItemsTrack[key].qty -= qty; 
             }
         });
 
         let activeBorrowsGrouped = {};
         Object.values(lineItemsTrack).forEach(item => {
-            if (item.qty > 0) {
+            // 🚨 ถ้าหักลบแล้วเหลือ 0 จะหายไปจาก Dashboard อัตโนมัติ!
+            if (item.qty > 0) { 
                 const mapKey = `${item.line}_${item.date}`;
-                if (!activeBorrowsGrouped[mapKey]) {
-                    activeBorrowsGrouped[mapKey] = { line: item.line, date: item.date, name: item.staff, totalQty: 0, items: [] };
-                }
+                if (!activeBorrowsGrouped[mapKey]) activeBorrowsGrouped[mapKey] = { line: item.line, date: item.date, name: item.staff, totalQty: 0, items: [] };
                 activeBorrowsGrouped[mapKey].totalQty += item.qty;
-                // 🎯 ส่งตัวแปร unit กลับไปโชว์ที่ Dashboard
                 activeBorrowsGrouped[mapKey].items.push({ name: item.name, qty: item.qty, unit: item.unit }); 
             }
         });
 
         res.json({
-            animals,
-            procedures,
-            activeBorrows: Object.values(activeBorrowsGrouped),
-            abnormalLabs: [] 
+            animals, procedures, activeBorrows: Object.values(activeBorrowsGrouped), abnormalLabs: [] 
         });
     } catch (e) { 
         console.error("Dashboard Fetch Error:", e);
@@ -363,31 +349,6 @@ app.post('/api/liff/procedure', async (req, res) => {
             'VitaminB': req.body.vitb
         });
 
-        // จัดรูปแบบหน้าตา Flex Message
-        const flexReport = {
-            type: "flex", altText: `📝 หัตถการฟาร์มคุณ ${d.ownerName}`,
-            contents: {
-                type: "bubble",
-                header: { type: "box", layout: "vertical", backgroundColor: "#00246B", contents: [{ type: "text", text: `📝 ยอดหัตถการ ${d.line}`, color: "#FFFFFF", weight: "bold", align: "center" }] },
-                body: {
-                    type: "box", layout: "vertical", spacing: "sm",
-                    contents: [
-                        { type: "text", text: `👤 Owner: ${d.ownerName}`, weight: "bold", color: "#1e3a8a" },
-                        { type: "text", text: `📍 Address: ${d.ownerAddress} | 📞 โทร: ${d.ownerPhone}`, size: "xs", color: "#64748b", wrap: true },
-                        { type: "separator", margin: "md" },
-                        { type: "box", layout: "horizontal", contents: [{ type: "text", text: "Total Animals", weight: "bold", flex: 2 }, { type: "text", text: `${totalAnimals} ตัว`, align: "end", weight: "bold" }] },
-                        { type: "text", text: speciesBreakdown.replace(/,/g, ' | '), size: "xs", color: "#94a3b8", wrap: true },
-                        { type: "separator", margin: "md" },
-                        { type: "box", layout: "horizontal", contents: [{ type: "text", text: "💉 Blood / Feces", size: "sm" }, { type: "text", text: `${d.blood} / ${d.feces} ตัว`, align: "end", size: "sm", weight: "bold" }] },
-                        { type: "box", layout: "horizontal", contents: [{ type: "text", text: "🦠 FMD / LSD", size: "sm" }, { type: "text", text: `${d.fmd} / ${d.lsd} ตัว`, align: "end", size: "sm", weight: "bold" }] },
-                        { type: "box", layout: "horizontal", contents: [{ type: "text", text: "💊 Iver / Alben", size: "sm" }, { type: "text", text: `${d.iver} / ${d.alben} ตัว`, align: "end", size: "sm", weight: "bold" }] },
-                        { type: "box", layout: "horizontal", contents: [{ type: "text", text: "🧪 Vitamin", size: "sm" }, { type: "text", text: `${d.vitamin} ตัว`, align: "end", size: "sm", weight: "bold" }] },
-                        { type: "box", layout: "horizontal", contents: [{ type: "text", text: "📌 Others", size: "sm" }, { type: "text", text: `${d.others || '-'}`, align: "end", size: "sm", weight: "bold", wrap: true }] },
-                        { type: "text", text: `Recorded by: ${d.staffName}`, size: "xxs", color: "#94a3b8", align: "end", margin: "md" }
-                    ]
-                }
-            }
-        };
 
         // 🌟 ยิงตรงส่งข้อความเข้า LINE OA ส่วนตัวของคนกรอกเพื่อเป็นใบเสร็จสรุปยอด
         if (d.lineId && d.lineId !== "TEST_ENV") {
@@ -885,6 +846,9 @@ await client.pushMessage({
 // ==========================================
 // 📦 API 1: ดึงยอดค้างเบิกรวมของทั้งสาย + ดึงรูปภาพจาก Inventory มารวม
 // ==========================================
+// ==========================================
+// 📦 API 1: ดึงยอดค้างเบิกรวมของทั้งสาย (เพิ่ม .trim() ป้องกันบัค)
+// ==========================================
 app.get('/api/team-taken-items', async (req, res) => {
     try {
         const { date, line } = req.query;
@@ -892,7 +856,7 @@ app.get('/api/team-taken-items', async (req, res) => {
         
         const takeoutSheet = doc.sheetsByTitle['Log_Takeout']; 
         const returnSheet = doc.sheetsByTitle['Log_Return'];
-        const invSheet = doc.sheetsByTitle['Inventory']; // 🚨 ดึงชีทคลังเพื่อเอารูปภาพและหน่วยลักษณะนาม
+        const invSheet = doc.sheetsByTitle['Inventory']; 
         
         if(!takeoutSheet) return res.json({ items: [], campDate: date, campLine: line });
         
@@ -900,72 +864,43 @@ app.get('/api/team-taken-items', async (req, res) => {
         const rRows = returnSheet ? await returnSheet.getRows() : [];
         const invRows = invSheet ? await invSheet.getRows() : [];
 
-        // 🌟 สร้างแผนผัง Map ดึงรูปภาพและหน่วยจากคลังมาเตรียมไว้
         let itemMap = {};
         invRows.forEach(r => {
-            const name = r.get('รายการ') || "";
-            const unit = r.get('Unit') || "ชิ้น";
+            const name = (r.get('รายการ') || "").trim(); // 🚨 .trim()
+            const unit = (r.get('Unit') || "").trim() || "ชิ้น";
             const img = r.get('Image_URL') || "";
             if(name) itemMap[name] = { unit, img };
         });
 
         let teamItems = {};
 
-        // 1. นำของที่เบิกไปทั้งหมดมากองรวมกัน
         tRows.forEach(r => {
             if (r.get('Camp_Date') === date && r.get('Camp_Line') === line) {
-                const itemName = r.get('Item_Name');
+                const itemName = (r.get('Item_Name') || "").trim(); // 🚨 .trim()
                 const qty = parseInt(r.get('Amount_Taken')) || 0;
 
                 if (!teamItems[itemName]) {
                     teamItems[itemName] = { 
-                        name: itemName, 
-                        stock: 0, 
-                        unit: itemMap[itemName] ? itemMap[itemName].unit : 'ชิ้น', 
-                        image: itemMap[itemName] ? itemMap[itemName].img : '' // 🖼️ ดึงรูปมาโชว์หน้าคืนสำเร็จ!
+                        name: itemName, stock: 0, unit: itemMap[itemName] ? itemMap[itemName].unit : 'ชิ้น', image: itemMap[itemName] ? itemMap[itemName].img : ''
                     };
                 }
                 teamItems[itemName].stock += qty;
             }
         });
 
-        // 2. หักลบยอดที่คืนไปแล้ว
         rRows.forEach(r => {
             if (r.get('Camp_Date') === date && r.get('Camp_Line') === line) {
-                const itemName = r.get('Item_Name');
+                const itemName = (r.get('Item_Name') || "").trim(); // 🚨 .trim()
                 const qty = parseInt(r.get('Amount_Returned')) || 0;
-                
                 if (teamItems[itemName]) teamItems[itemName].stock -= qty;
             }
         });
 
-        // คัดมาเฉพาะอันที่ยอดคงเหลือมากกว่า 0 (ค้างอยู่)
         const pendingItems = Object.values(teamItems).filter(i => i.stock > 0);
         res.json({ items: pendingItems, campDate: date, campLine: line });
     } catch(e) { console.error(e); res.status(500).json({ items: [] }); }
 });
 
-// ==========================================
-// 📦 API 2: บันทึกการเบิก/คืน และส่ง Flex Message
-// ==========================================
-// ==========================================
-// 📦 API 2: บันทึกการเบิก/คืน และส่ง Flex Message
-// ==========================================
-// ==========================================
-// 📦 API 2: บันทึกการเบิก/คืน, ตัดสต๊อก Real-time และส่ง Flex Message
-// ==========================================
-// ==========================================
-// 📦 API 2: บันทึกการเบิก/คืน และส่ง Flex Message (เข้าส่วนตัว + เข้ากลุ่มผ่าน env)
-// ==========================================
-// ==========================================
-// 📦 API 2: บันทึกการเบิก/คืน ป้องกันสต๊อกติดลบ + ซ่อม Flex Message แจ้งเตือน
-// ==========================================
-// ==========================================
-// 📦 API 2: บันทึกการเบิก/คืน (อัปเกรดความเร็วแสง + แก้บัค Google API Limit)
-// ==========================================
-// ==========================================
-// 📦 API 2: บันทึกเบิก/คืน (จับ Error หมดพลัง + แจ้งยอดคงเหลือ)
-// ==========================================
 app.post('/api/inventory-action', express.json(), async (req, res) => {
     try {
         const cleanStr = (v, def) => (v === undefined || v === null || String(v).trim() === 'undefined' || String(v).trim() === '') ? def : String(v).trim();
@@ -984,10 +919,11 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
         const invRows = await invSheet.getRows();
         let flexItemsList = [];
 
-        // 1. เช็คของในคลังก่อนว่าพอไหม
+        // 🚨 1. เช็คของในคลังก่อนว่าพอไหม (ใส่ .trim() ดักเว้นวรรค)
         if (action === 'เบิกของ') {
             for (let item of items) {
-                const targetRow = invRows.find(r => r.get('รายการ') === cleanStr(item.name, ''));
+                const itemNameTrimmed = cleanStr(item.name, '');
+                const targetRow = invRows.find(r => (r.get('รายการ') || '').trim() === itemNameTrimmed);
                 if (targetRow) {
                     const currentStock = parseInt(targetRow.get('จำนวน')) || 0;
                     if (currentStock < cleanNum(item.qty)) {
@@ -997,7 +933,7 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
             }
         }
 
-        // 2. บันทึกประวัติลง Log แบบรวบยอด (Batch)
+        // 2. บันทึกประวัติลง Log แบบรวบยอด
         const rowsToInsert = [];
         if (action === 'เบิกของ') {
             items.forEach(item => rowsToInsert.push({ 'Timestamp': new Date().toLocaleString('th-TH'), 'Staff': staffName, 'Item_Name': cleanStr(item.name, ''), 'Amount_Taken': cleanNum(item.qty), 'LINE_ID': lineId, 'Status': 'ยังไม่คืน', 'Camp_Date': date, 'Camp_Line': line }));
@@ -1007,35 +943,49 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
             await doc.sheetsByTitle['Log_Return'].addRows(rowsToInsert);
         }
 
-        // 3. อัปเดตตัดสต๊อกหน้า Inventory + คำนวณยอดคงเหลือ
+        // 🌟 3. อัปเดตตัดสต๊อกหน้า Inventory (หาแถวเจอ 100%)
         for (let item of items) {
-            const targetRow = invRows.find(r => r.get('รายการ') === cleanStr(item.name, ''));
+            const itemNameTrimmed = cleanStr(item.name, '');
+            const targetRow = invRows.find(r => (r.get('รายการ') || '').trim() === itemNameTrimmed);
             let finalStock = 0;
+            
             if (targetRow) {
                 let currentStock = parseInt(targetRow.get('จำนวน')) || 0;
                 if (action === 'เบิกของ') currentStock -= cleanNum(item.qty);
                 else if (action === 'คืนของ') currentStock += cleanNum(item.qty);
                 finalStock = currentStock < 0 ? 0 : currentStock;
                 targetRow.set('จำนวน', finalStock);
-                await targetRow.save(); // ยิงคำสั่งอัปเดต Google Sheet
+                await targetRow.save(); 
+            } else {
+                console.warn(`⚠️ หาอุปกรณ์ชื่อ [${itemNameTrimmed}] ไม่เจอในชีท Inventory`);
             }
-            // แพ็คข้อมูลไว้ทำ Flex Message
-            flexItemsList.push({ name: cleanStr(item.name, ''), qty: cleanNum(item.qty), unit: cleanStr(item.unit, 'ชิ้น'), remaining: finalStock });
+            flexItemsList.push({ name: itemNameTrimmed, qty: cleanNum(item.qty), unit: cleanStr(item.unit, 'ชิ้น'), remaining: finalStock });
         }
 
-        // 4. (กรณีคืนของ) ย้อนไปซ่อมสถานะให้เป็น "คืนแล้ว"
+        // 🌟 4. ซ่อมสถานะให้เป็น "คืนแล้ว" ใน Log_Takeout
         if (action === 'คืนของ') {
             const tkSheet = doc.sheetsByTitle['Log_Takeout'];
             if(tkSheet) {
                 const tkRows = await tkSheet.getRows();
+                let rowsToUpdate = [];
                 for (let item of items) {
-                    const matchedRow = tkRows.find(r => r.get('Camp_Date') === date && r.get('Camp_Line') === line && r.get('Item_Name') === cleanStr(item.name, '') && r.get('Status') !== 'คืนแล้ว');
-                    if(matchedRow) { matchedRow.set('Status', 'คืนแล้ว'); await matchedRow.save(); }
+                    const itemNameTrimmed = cleanStr(item.name, '');
+                    tkRows.forEach(r => {
+                        if (r.get('Camp_Date') === date && 
+                            r.get('Camp_Line') === line && 
+                            (r.get('Item_Name') || '').trim() === itemNameTrimmed && 
+                            r.get('Status') !== 'คืนแล้ว') {
+                            
+                            r.set('Status', 'คืนแล้ว');
+                            if (!rowsToUpdate.includes(r)) rowsToUpdate.push(r);
+                        }
+                    });
                 }
+                for (let r of rowsToUpdate) { await r.save(); }
             }
         }
 
-        // 5. บิลด์ Flex Message (เพิ่มช่อง "ยอดคงเหลือในคลัง" ให้แล้วครับ)
+        // 5. บิลด์ Flex Message
         const colorMain = action === 'เบิกของ' ? '#00246B' : '#dc2626'; 
         const icon = action === 'เบิกของ' ? '📤' : '📥';
         let itemListHtml = flexItemsList.map(i => ({
@@ -1056,7 +1006,6 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
 
     } catch (e) {
         console.error("Inventory Action Error:", e);
-        // 🚨 เครื่องดักจับโควต้าเต็ม (Rate Limit 429)
         const msg = (e.message || "").toLowerCase();
         if (msg.includes("quota") || msg.includes("429") || msg.includes("rate limit") || msg.includes("too many requests")) {
             return res.status(429).json({ success: false, message: "ระบบหมดพลัง ⏳ ขอให้รอ 1 นาทีแล้วกดทำรายการอีกครั้ง ขออภัยครับ" });
