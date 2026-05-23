@@ -206,6 +206,9 @@ app.post('/api/presence', (req, res) => {
 });
 
 // 2. API แดชบอร์ดสรุปยอด: ดึงข้อมูลจากกูเกิ้ลชีททั้งหมดมาแปรผล ยอดสัตว์, ยอดหัตถการ, ยอดแล็บป่วย
+// ==========================================
+// 📊 API 4: ดึงข้อมูล Dashboard (ซ่อมบัคหน่วย Undefined + ตัดยอดค้างเมื่อคืนแล้ว)
+// ==========================================
 app.get('/api/dashboard', async (req, res) => {
     try {
         const doc = await getSheetDoc();
@@ -218,7 +221,7 @@ app.get('/api/dashboard', async (req, res) => {
 
         pRows.forEach(r => {
             animals['วัว'] += (parseInt(r.get('Cow')) || 0);
-            animals['ควาย'] += (parseInt(r.get('Buffalo')) || 0); // ซ่อมตัวแปรให้ตรง
+            animals['ควาย'] += (parseInt(r.get('Buffalo')) || 0);
             animals['แพะ'] += (parseInt(r.get('Goat')) || 0);
             animals['แกะ'] += (parseInt(r.get('Sheep')) || 0);
 
@@ -226,18 +229,24 @@ app.get('/api/dashboard', async (req, res) => {
                 let sheetKey = key;
                 if(key === 'EDTA_tube') sheetKey = 'EDTA_Tube';
                 if(key === 'Clot_tube') sheetKey = 'Clot_Tube';
-                if(key === 'Ivermectin') sheetKey = 'Ivermectin';
-                if(key === 'Albendazole') sheetKey = 'Albendazole';
+                if(key === 'Ivermectin') sheetKey = 'Iver';
+                if(key === 'Albendazole') sheetKey = 'Alben';
                 if(key === 'VitaminB') sheetKey = 'VitaminB';
-                if(key ===  'DexamVet') sheetKey = 'DexamVet';
-                if(key ===  'Chloramine') sheetKey = 'Chloramine';
-                if(key ===  'FMD') sheetKey = 'FMD';
-                if(key ===  'LSD') sheetKey = 'LSD';
                 procedures[key] += (parseInt(r.get(sheetKey)) || 0);
             }
         });
 
-        // 🌟 2. คำนวณค้างเบิกแบบ Real-time (สูตรคำนวณ: เบิกหักลบคืนทั้งหมดของสาย) 🌟
+        // 🌟 2. ดึงข้อมูลหน่วย (Unit) จากหน้า Inventory มาเก็บไว้ในคลังสมอง
+        const invSheet = doc.sheetsByTitle['Inventory'];
+        const invRows = invSheet ? await invSheet.getRows() : [];
+        let unitMap = {};
+        invRows.forEach(r => {
+            const itemName = r.get('รายการ') ? r.get('รายการ').trim() : '';
+            const unit = r.get('Unit') ? r.get('Unit').trim() : 'ชิ้น';
+            if(itemName) unitMap[itemName] = unit;
+        });
+
+        // 🌟 3. คำนวณค้างเบิกแบบ Real-time
         const takeoutSheet = doc.sheetsByTitle['Log_Takeout'];
         const returnSheet = doc.sheetsByTitle['Log_Return'];
         
@@ -247,16 +256,23 @@ app.get('/api/dashboard', async (req, res) => {
         let lineItemsTrack = {};
 
         tRows.forEach(r => {
+            // 🚨 ข้ามของที่คืนแล้ว (ป้องกันบัคยอดค้าง)
+            if (r.get('Status') === 'คืนแล้ว') return; 
+
             const line = r.get('Camp_Line');
             const date = r.get('Camp_Date');
-            const name = r.get('Item_Name');
+            const name = r.get('Item_Name') ? r.get('Item_Name').trim() : '';
             const qty = parseInt(r.get('Amount_Taken')) || 0;
             const staff = r.get('Staff') || "ผู้ปฏิบัติงาน";
+            
+            // 🎯 ดึงหน่วยจากคลังสมองมาประกบ ถ้าหาไม่เจอให้ใช้คำว่า 'ชิ้น'
+            const unit = unitMap[name] || 'ชิ้น'; 
 
             if (qty > 0 && line && date) {
                 const key = `${line}_${date}_${name}`;
                 if (!lineItemsTrack[key]) {
-                    lineItemsTrack[key] = { line, date, name, qty: 0, staff };
+                    // แปะหน่วย (unit) เตรียมส่งไปให้หน้าเว็บ
+                    lineItemsTrack[key] = { line, date, name, qty: 0, staff, unit }; 
                 }
                 lineItemsTrack[key].qty += qty;
             }
@@ -265,18 +281,17 @@ app.get('/api/dashboard', async (req, res) => {
         rRows.forEach(r => {
             const line = r.get('Camp_Line');
             const date = r.get('Camp_Date');
-            const name = r.get('Item_Name');
+            const name = r.get('Item_Name') ? r.get('Item_Name').trim() : '';
             const qty = parseInt(r.get('Amount_Returned')) || 0;
 
             if (qty > 0 && line && date) {
                 const key = `${line}_${date}_${name}`;
                 if (lineItemsTrack[key]) {
-                    lineItemsTrack[key].qty -= qty; // หักลบด้วยยอดที่คืนไปจริง
+                    lineItemsTrack[key].qty -= qty; 
                 }
             }
         });
 
-        // คัดกรองเหลือแค่กลุ่มที่มียอดค้างเหลือเบิกมากกว่า 0 จริงๆ เท่านั้น
         let activeBorrowsGrouped = {};
         Object.values(lineItemsTrack).forEach(item => {
             if (item.qty > 0) {
@@ -285,7 +300,8 @@ app.get('/api/dashboard', async (req, res) => {
                     activeBorrowsGrouped[mapKey] = { line: item.line, date: item.date, name: item.staff, totalQty: 0, items: [] };
                 }
                 activeBorrowsGrouped[mapKey].totalQty += item.qty;
-                activeBorrowsGrouped[mapKey].items.push({ name: item.name, qty: item.qty });
+                // 🎯 ส่งตัวแปร unit กลับไปโชว์ที่ Dashboard
+                activeBorrowsGrouped[mapKey].items.push({ name: item.name, qty: item.qty, unit: item.unit }); 
             }
         });
 
@@ -293,9 +309,12 @@ app.get('/api/dashboard', async (req, res) => {
             animals,
             procedures,
             activeBorrows: Object.values(activeBorrowsGrouped),
-            abnormalLabs: [] // ส่วนแล็บผิดปกติคงเดิม
+            abnormalLabs: [] 
         });
-    } catch (e) { res.status(500).json({ success: false }); }
+    } catch (e) { 
+        console.error("Dashboard Fetch Error:", e);
+        res.status(500).json({ success: false }); 
+    }
 });
             // ==========================================
 
@@ -941,9 +960,11 @@ app.get('/api/team-taken-items', async (req, res) => {
 // ==========================================
 // 📦 API 2: บันทึกการเบิก/คืน ป้องกันสต๊อกติดลบ + ซ่อม Flex Message แจ้งเตือน
 // ==========================================
+// ==========================================
+// 📦 API 2: บันทึกการเบิก/คืน (อัปเกรดความเร็วแสง + แก้บัค Google API Limit)
+// ==========================================
 app.post('/api/inventory-action', express.json(), async (req, res) => {
     try {
-        // 🧹 ฟังก์ชันกรองคำ ป้องกัน undefined ทำ Flex Message พัง
         const cleanStr = (v, def) => (v === undefined || v === null || String(v).trim() === 'undefined' || String(v).trim() === '') ? def : String(v).trim();
         const cleanNum = (v) => parseInt(v) || 0;
 
@@ -958,7 +979,7 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
         const invSheet = doc.sheetsByTitle['Inventory'];
         if (!invSheet) throw new Error("ไม่พบแท็บคลังสินค้าหลัก Inventory");
 
-        // 🚨 [ANTI RACE-CONDITION LOGIC] เช็คสต๊อกก่อนเซฟ
+        // 🚨 1. เช็คสต๊อกก่อนเซฟ (ป้องกันของหมด)
         const invRows = await invSheet.getRows();
         if (action === 'เบิกของ') {
             for (let item of items) {
@@ -972,33 +993,7 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
             }
         }
 
-        // 2. รันลูปจดลงหน้า Log
-        if (action === 'เบิกของ') {
-            const sheet = doc.sheetsByTitle['Log_Takeout'];
-            for (let item of items) {
-                await sheet.addRow({ 'Timestamp': new Date().toLocaleString('th-TH'), 'Staff': staffName, 'Item_Name': cleanStr(item.name, 'อุปกรณ์'), 'Amount_Taken': cleanNum(item.qty), 'LINE_ID': lineId, 'Status': 'ยังไม่คืน', 'Camp_Date': date, 'Camp_Line': line });
-            }
-        } else if (action === 'คืนของ') {
-            const sheet = doc.sheetsByTitle['Log_Return'];
-            for (let item of items) {
-                await sheet.addRow({ 'Timestamp': new Date().toLocaleString('th-TH'), 'LINE_ID': lineId, 'Item_Name': cleanStr(item.name, 'อุปกรณ์'), 'Amount_Returned': cleanNum(item.qty), 'Amount_Used': 0, 'Unit': cleanStr(item.unit, 'ชิ้น'), 'Camp_Date': date, 'Camp_Line': line });
-            }
-        }
-
-        // 3. ปรับเปลี่ยนอัปเดตตัวสต๊อกจริงในหน้าคลัง
-        for (let item of items) {
-            const targetRow = invRows.find(r => r.get('รายการ') === cleanStr(item.name, ''));
-            if (targetRow) {
-                let currentStock = parseInt(targetRow.get('จำนวน')) || 0;
-                if (action === 'เบิกของ') currentStock -= cleanNum(item.qty);
-                else if (action === 'คืนของ') currentStock += cleanNum(item.qty);
-                
-                targetRow.set('จำนวน', currentStock < 0 ? 0 : currentStock);
-                await targetRow.save();
-            }
-        }
-
-        // 4. บิล Flex Message สรุปผล
+        // 🌟 2. สร้างโครงสร้าง Flex Message ทันที!
         const colorMain = action === 'เบิกของ' ? '#00246B' : '#dc2626'; 
         const icon = action === 'เบิกของ' ? '📤' : '📥';
         let itemListHtml = items.map(i => ({
@@ -1018,26 +1013,67 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
             }
         };
 
-        // ยิงส่ง แชทส่วนตัว (เพิ่มตัวจับ Error)
+        // 🌟 3. ยิง Flex Message ออกไปก่อนเลย ป้องกัน LINE/Google Timeout!
         if (lineId && lineId !== "TEST_ENV") {
-            try { await client.pushMessage({ to: lineId, messages: [flexMsg] }); } 
-            catch(e) { console.error("🚨 ยิง Flex ส่วนตัวล้มเหลว:", e.message); }
+            try { await client.pushMessage({ to: lineId, messages: [flexMsg] }); } catch(e) {}
         }
-
-        // ยิงส่ง ไลน์กลุ่ม (เพิ่มตัวจับ Error)
         const groupId = process.env.LINE_GROUP_ID;
         if (groupId) { 
-            try { 
-                await client.pushMessage({ to: groupId, messages: [flexMsg] }); 
-                console.log(`✅ ส่งแจ้งเตือน ${action} เข้ากลุ่มปศุสัตว์เรียบร้อย!`);
-            } 
-            catch(err) { console.error("🚨 ยิง Flex เข้ากลุ่มล้มเหลว:", err.message); } 
+            try { await client.pushMessage({ to: groupId, messages: [flexMsg] }); } catch(err) {} 
         }
 
+        // 🌟 4. ตอบกลับหน้าเว็บทันที เพื่อให้น้องๆ หน้าแอปไม่ต้องรอนาน โหลดผ่านฉลุย
         res.json({ success: true });
+
+        // ========================================================
+        // 🌟 5. กระบวนการหลังบ้าน: บันทึกลง Sheet (รันแบบ Background ปิดบัคความช้า)
+        // ========================================================
+        try {
+            // 5.1 บันทึก Log แบบ "รวบยอด" (Batch Insert) ใช้ API แค่ 1 ครั้ง!
+            const rowsToInsert = [];
+            if (action === 'เบิกของ') {
+                const sheet = doc.sheetsByTitle['Log_Takeout'];
+                items.forEach(item => rowsToInsert.push({ 'Timestamp': new Date().toLocaleString('th-TH'), 'Staff': staffName, 'Item_Name': cleanStr(item.name, 'อุปกรณ์'), 'Amount_Taken': cleanNum(item.qty), 'LINE_ID': lineId, 'Status': 'ยังไม่คืน', 'Camp_Date': date, 'Camp_Line': line }));
+                await sheet.addRows(rowsToInsert);
+            } else if (action === 'คืนของ') {
+                const sheet = doc.sheetsByTitle['Log_Return'];
+                items.forEach(item => rowsToInsert.push({ 'Timestamp': new Date().toLocaleString('th-TH'), 'LINE_ID': lineId, 'Item_Name': cleanStr(item.name, 'อุปกรณ์'), 'Amount_Returned': cleanNum(item.qty), 'Amount_Used': 0, 'Unit': cleanStr(item.unit, 'ชิ้น'), 'Camp_Date': date, 'Camp_Line': line }));
+                await sheet.addRows(rowsToInsert);
+            }
+
+            // 5.2 อัปเดตยอดสต๊อกในหน้า Inventory
+            for (let item of items) {
+                const targetRow = invRows.find(r => r.get('รายการ') === cleanStr(item.name, ''));
+                if (targetRow) {
+                    let currentStock = parseInt(targetRow.get('จำนวน')) || 0;
+                    if (action === 'เบิกของ') currentStock -= cleanNum(item.qty);
+                    else if (action === 'คืนของ') currentStock += cleanNum(item.qty);
+                    targetRow.set('จำนวน', currentStock < 0 ? 0 : currentStock);
+                    await targetRow.save(); 
+                }
+            }
+
+            // 🌟 5.3 ซ่อมบัค Status: ถ้ายิงคืนของ ให้เดินกลับไปแก้ Status ใน Log_Takeout เป็น "คืนแล้ว"
+            if (action === 'คืนของ') {
+                const tkSheet = doc.sheetsByTitle['Log_Takeout'];
+                if(tkSheet) {
+                    const tkRows = await tkSheet.getRows();
+                    for (let item of items) {
+                        const matchedRow = tkRows.find(r => r.get('Camp_Date') === date && r.get('Camp_Line') === line && r.get('Item_Name') === cleanStr(item.name, '') && r.get('Status') !== 'คืนแล้ว');
+                        if(matchedRow) {
+                            matchedRow.set('Status', 'คืนแล้ว');
+                            await matchedRow.save();
+                        }
+                    }
+                }
+            }
+        } catch (bgErr) {
+            console.error("🚨 Background Google Sheet Update Error:", bgErr);
+        }
+
     } catch (e) { 
         console.error("Inventory Save Error:", e);
-        res.status(500).json({ success: false, message: e.message }); 
+        if (!res.headersSent) res.status(500).json({ success: false, message: e.message }); 
     }
 });
 
