@@ -291,7 +291,7 @@
         };
 
         // --- ตั้งค่าหมวดหมู่อุปกรณ์ ---
-        const categoryMapping = {
+        const CategoryMapping = {
             "Syringe ไซริงค์": ["Syringe พลาสติก 3 ml", "Syringe พลาสติก 5 ml", "Syringe พลาสติก 10 ml", "Syringe พลาสติก 20 ml", "Syringe แก้ว 5ml", "Syringe แก้ว 10ml"],
             "Needle เข็ม": ["Needle พลาสติก 18Gx1", "Needle พลาสติก 18Gx1.5", "Needle พลาสติก 20Gx1", "Needle พลาสติก 21Gx1", "Needle พลาสติก 22Gx1", "Needle เหล็ก 18x1", "Needle เหล็ก 18x3/4", "Needle เหล็ก 18x1.5"],
             "อุปกรณ์จับบังคับ": ["เชือกยาว", "เชือกคางเรือ", "เชือกแดง", "ถุงมือจับบังคับ", "กล่องเก็บเชือก"],
@@ -805,10 +805,106 @@
             container.innerHTML = html;
         }
 
-        function updQty(idx, change) {
-            let item = inventoryData[idx]; let n = item.selectedQty + change;
-            if (n < 0) n = 0; if (n > item.stock) n = item.stock;
-            item.selectedQty = n; document.getElementById(`qty-${idx}`).value = n; validateInv();
+        // 🌟 1. ดึงข้อมูล CategoryMapping ต้นฉบับที่ถูกต้องเป๊ะๆ กลับมา
+        const categoryMapping = {
+            "Syringe ไซริงค์": ["Syringe พลาสติก 3 ml", "Syringe พลาสติก 5 ml", "Syringe พลาสติก 10 ml", "Syringe พลาสติก 20 ml", "Syringe แก้ว 5ml", "Syringe แก้ว 10ml", "ไซริงค์", "Syringe"],
+            "Needle เข็ม": ["Needle พลาสติก 18Gx1", "Needle พลาสติก 18Gx1.5", "Needle พลาสติก 20Gx1", "Needle พลาสติก 21Gx1", "Needle พลาสติก 22Gx1", "Needle เหล็ก 18x1", "Needle เหล็ก 18x3/4", "Needle เหล็ก 18x1.5", "Needle", "เข็ม"],
+            "อุปกรณ์จับบังคับ": ["เชือกยาว", "เชือกคางเรือ", "เชือกแดง", "ถุงมือจับบังคับ", "กล่องเก็บเชือก", "เชือก"],
+            "อุปกรณ์หัตถการ": ["กระปุกแอลกอฮอล์", "สำลีดีนี่", "สำลีตราพยาบาล", "กล่องเครื่องมือ", "สเปรย์เบตาดีน", "ถุงขยะดำ", "ถุงขยะแดง", "แปรงขัดบูท", "ไขควง", "กระติกใส่ albendazole", "Alcohol", "กระปุกทิ้ง Needle", "ถุงมือยาง S", "ถุงมือยาง M", "ถุงมือยาง L", "สำลี", "สเปรย์", "ถุงมือ", "ถุงขยะ", "กระติก"],
+            "อุปกรณ์จดบันทึก": ["แฟ้มจดบันทึก", "กระดาษจดบันทึก", "กระดาษ Checklist", "แฟ้ม", "กระดาษ", "Checklist"],
+            "อุปกรณ์ Lab": ["Clot Tube", "EDTA Tube", "ตะกร้าหลอดเก็บเลือด", "ตะแกรงหลอดเก็บเลือด", "Rack โฟม", "ซองเก็บตัวอย่าง", "Tube", "หลอด"],
+            "เวชภัณฑ์": ["Ivomec-F", "MectinVet", "Baymec", "NovaB", "DexamVet", "Albendazole", "Ivermectin", "Chloramine", "Dexam"],
+            "อุปกรณ์ทั่วไป": ["หม้อต้มไซริงค์", "แปรงขัดไซริงค์" , "คัมภีร์ปศุสัตว์", "O ring", "หม้อต้ม", "แปรง"]
+        };
+        const categoryOrder = ["Syringe ไซริงค์", "Needle เข็ม", "อุปกรณ์จับบังคับ", "อุปกรณ์หัตถการ", "อุปกรณ์จดบันทึก", "อุปกรณ์ Lab", "เวชภัณฑ์", "อุปกรณ์ทั่วไป", "อื่นๆ"];
+
+        function getCategoryFor(itemName) {
+            if (!itemName) return "อื่นๆ";
+            for (const [catName, keywords] of Object.entries(categoryMapping)) {
+                if (keywords.some(kw => itemName.toLowerCase().includes(kw.toLowerCase()))) {
+                    return catName;
+                }
+            }
+            return "อื่นๆ";
+        }
+
+        // 🌟 2. เรนเดอร์หน้าจอใหม่ (ซ่อมปุ่มให้ใช้ input เพื่อไม่ให้โค้ดพัง)
+        function renderInvItems() {
+            const container = document.getElementById('invContainer');
+            if (!container) return;
+
+            const groupedData = {};
+            categoryOrder.forEach(cat => groupedData[cat] = []);
+
+            inventoryData.forEach(item => {
+                const cat = getCategoryFor(item.name);
+                if (groupedData[cat]) groupedData[cat].push(item);
+            });
+
+            let html = '';
+
+            categoryOrder.forEach(cat => {
+                if (groupedData[cat] && groupedData[cat].length > 0) {
+                    html += `
+                    <div class="mb-5">
+                        <h3 class="text-xs font-bold text-[#00246B] bg-slate-100 px-3 py-1.5 rounded-lg mb-2 flex items-center justify-between shadow-sm">
+                            <span>📦 ${cat}</span>
+                            <span class="text-[9px] bg-[#00246B] text-white px-2 py-0.5 rounded-full font-bold">${groupedData[cat].length} รายการ</span>
+                        </h3>
+                        <div class="space-y-2">
+                    `;
+
+                    groupedData[cat].forEach(item => {
+                        const imgUrl = item.image && item.image.trim() !== '' ? item.image : 'https://cdn-icons-png.flaticon.com/512/1516/1516104.png';
+                        
+                        html += `
+                        <div class="flex items-center justify-between p-3 bg-white rounded-xl shadow-sm border border-slate-100/80 hover:shadow-md transition-shadow">
+                            <div class="flex items-center gap-3 w-2/3">
+                                <img src="${imgUrl}" class="w-11 h-11 object-cover rounded-lg border border-slate-100 shadow-sm shrink-0">
+                                <div class="min-w-0">
+                                    <div class="text-xs font-bold text-[#00246B] truncate">${item.name}</div>
+                                    <div class="text-[10px] text-slate-500 mt-0.5">
+                                        คงเหลือ: <span class="font-bold ${item.stock > 0 ? 'text-[#F8B500]' : 'text-red-500'}">${item.stock}</span> ${item.unit}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-center gap-2 shrink-0">
+                                <button onclick="updateQty(${item._idx}, -1)" class="w-7 h-7 rounded-full bg-slate-100 text-slate-600 font-bold active:bg-slate-200 transition-colors flex items-center justify-center">-</button>
+                                <input type="text" id="qty-${item._idx}" class="text-sm font-bold text-[#00246B] w-6 text-center bg-transparent border-none focus:outline-none p-0 m-0 pointer-events-none" value="${item.selectedQty}" readonly>
+                                <button onclick="updateQty(${item._idx}, 1)" class="w-7 h-7 rounded-full bg-[#00246B] text-white font-bold active:bg-blue-800 transition-colors flex items-center justify-center shadow-sm">+</button>
+                            </div>
+                        </div>`;
+                    });
+
+                    html += `</div></div>`;
+                }
+            });
+
+            container.innerHTML = html;
+        }
+
+        // 🌟 3. ซ่อมระบบกดบวกลบให้เสถียรที่สุด
+        function updateQty(idx, change) {
+            let item = inventoryData.find(i => i._idx === idx);
+            if (!item) return;
+
+            let newQty = item.selectedQty + change;
+            if (newQty < 0) newQty = 0;
+            if (newQty > item.stock) {
+                alert(isReturnMode ? `ค้างอยู่ในสายแค่ ${item.stock} ${item.unit}` : `ในคลังเหลือ ${item.stock} ${item.unit}`);
+                newQty = item.stock;
+            }
+
+            item.selectedQty = newQty;
+            const el = document.getElementById(`qty-${idx}`);
+            if(el) {
+                if(el.tagName === 'INPUT') el.value = newQty;
+                else el.innerText = newQty;
+            }
+            
+            // รีเฟรชปุ่มยืนยัน
+            if (typeof validateInv === 'function') validateInv();
         }
 
         function validateInv() {
