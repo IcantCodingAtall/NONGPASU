@@ -771,40 +771,94 @@
         }
 
         // 🌟 ซ่อมบัคหน้าเบิกว่างเปล่า: วาดรายการอุปกรณ์แบบเรียงลงมาเลย ไม่ต้องใช้คอลัมน์หมวดหมู่
+        // 🌟 1. ฟังก์ชันวาด UI และเสกปุ่ม "คืนทั้งหมด" กลับมา
         function renderInvItems() {
             const container = document.getElementById('invContainer');
             if (!container) return;
 
-            let html = '<div class="space-y-3 mt-2">';
-            
-            inventoryData.forEach((item) => {
-                // เช็คว่าถ้ารูปไม่มา ให้ใช้รูปกล่องพยาบาลแทน
-                const imgUrl = item.image && item.image.trim() !== '' ? item.image : 'https://cdn-icons-png.flaticon.com/512/1516/1516104.png';
-                
-                html += `
-                <div class="flex items-center justify-between p-3 bg-white rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-                    <div class="flex items-center gap-3 w-2/3">
-                        <img src="${imgUrl}" class="w-12 h-12 object-cover rounded-lg border border-slate-100 shadow-sm shrink-0">
-                        <div class="min-w-0">
-                            <div class="text-xs font-bold text-[#00246B] truncate">${item.name}</div>
-                            <div class="text-[10px] text-slate-500 mt-0.5">
-                                คงเหลือ: <span class="font-bold ${item.stock > 0 ? 'text-[#F8B500]' : 'text-red-500'}">${item.stock}</span> ${item.unit}
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="flex items-center gap-2 shrink-0">
-                        <button onclick="updateQty(${item._idx}, -1)" class="w-7 h-7 rounded-full bg-slate-100 text-slate-600 font-bold active:bg-slate-200 transition-colors flex items-center justify-center">-</button>
-                        <span id="qty-${item._idx}" class="text-sm font-bold text-[#00246B] w-4 text-center">${item.selectedQty}</span>
-                        <button onclick="updateQty(${item._idx}, 1)" class="w-7 h-7 rounded-full bg-[#00246B] text-white font-bold active:bg-blue-800 transition-colors flex items-center justify-center shadow-sm">+</button>
-                    </div>
-                </div>`;
+            const groupedData = {};
+            categoryOrder.forEach(cat => groupedData[cat] = []);
+
+            inventoryData.forEach(item => {
+                const cat = getCategoryFor(item.name);
+                if (groupedData[cat]) groupedData[cat].push(item);
             });
-            
-            html += '</div>';
+
+            let html = '';
+
+            // 🎯 ปุ่มคืนทั้งหมด จะโผล่มาเฉพาะหน้า "คืนของ" เท่านั้น
+            if (isReturnMode && inventoryData.length > 0) {
+                html += `
+                <div class="mb-4 bg-green-50 p-3 rounded-xl border border-green-200 flex justify-between items-center shadow-sm">
+                    <div>
+                        <h4 class="text-[11px] font-bold text-green-700">✅ คืนของทั้งหมด</h4>
+                        <p class="text-[9px] text-green-600 mt-0.5">กดปุ่มนี้เพื่อคืนอุปกรณ์เต็มจำนวนทุกรายการ</p>
+                    </div>
+                    <button onclick="setReturnAllMax()" class="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-all">
+                        คืนทั้งหมด
+                    </button>
+                </div>`;
+            }
+
+            // วาดหมวดหมู่
+            categoryOrder.forEach(cat => {
+                if (groupedData[cat] && groupedData[cat].length > 0) {
+                    html += `
+                    <div class="mb-5">
+                        <h3 class="text-xs font-bold text-[#00246B] bg-slate-100 px-3 py-1.5 rounded-lg mb-2 flex items-center justify-between shadow-sm">
+                            <span>📦 ${cat}</span>
+                            <span class="text-[9px] bg-[#00246B] text-white px-2 py-0.5 rounded-full font-bold">${groupedData[cat].length} รายการ</span>
+                        </h3>
+                        <div class="space-y-2">
+                    `;
+
+                    groupedData[cat].forEach(item => {
+                        const imgUrl = item.image && item.image.trim() !== '' ? item.image : 'https://cdn-icons-png.flaticon.com/512/1516/1516104.png';
+                        
+                        html += `
+                        <div class="flex items-center justify-between p-3 bg-white rounded-xl shadow-sm border border-slate-100/80 hover:shadow-md transition-shadow">
+                            <div class="flex items-center gap-3 w-2/3">
+                                <img src="${imgUrl}" class="w-11 h-11 object-cover rounded-lg border border-slate-100 shadow-sm shrink-0">
+                                <div class="min-w-0">
+                                    <div class="text-xs font-bold text-[#00246B] truncate">${item.name}</div>
+                                    <div class="text-[10px] text-slate-500 mt-0.5">
+                                        คงเหลือ: <span class="font-bold ${item.stock > 0 ? 'text-[#F8B500]' : 'text-red-500'}">${item.stock}</span> ${item.unit}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="flex items-center gap-2 shrink-0">
+                                <button onclick="updateQty(${item._idx}, -1)" class="w-7 h-7 rounded-full bg-slate-100 text-slate-600 font-bold active:bg-slate-200 transition-colors flex items-center justify-center">-</button>
+                                <input type="text" id="qty-${item._idx}" class="text-sm font-bold text-[#00246B] w-6 text-center bg-transparent border-none focus:outline-none p-0 m-0 pointer-events-none" value="${item.selectedQty}" readonly>
+                                <button onclick="updateQty(${item._idx}, 1)" class="w-7 h-7 rounded-full bg-[#00246B] text-white font-bold active:bg-blue-800 transition-colors flex items-center justify-center shadow-sm">+</button>
+                            </div>
+                        </div>`;
+                    });
+
+                    html += `</div></div>`;
+                }
+            });
+
             container.innerHTML = html;
         }
 
+        // 🌟 2. ซ่อมฟังก์ชันคืนของทั้งหมดให้ทำงานได้จริง
+        function setReturnAllMax() {
+            if (!confirm('ยืนยันการกดคืนอุปกรณ์ "เต็มจำนวน" ค้างสายทุกรายการใช่หรือไม่?')) return;
+            
+            inventoryData.forEach(item => {
+                item.selectedQty = item.stock; 
+                const inputEl = document.getElementById(`qty-${item._idx}`);
+                if (inputEl) {
+                    if (inputEl.tagName === 'INPUT') inputEl.value = item.stock;
+                    else inputEl.innerText = item.stock;
+                }
+            });
+            
+            if (typeof validateInv === 'function') validateInv();
+        }
+
+        // 🌟 1. ดึงข้อมูล CategoryMapping ต้นฉบับที่ถูกต้องเป๊ะๆ กลับมา
         // 🌟 1. ดึงข้อมูล CategoryMapping ต้นฉบับที่ถูกต้องเป๊ะๆ กลับมา
         const categoryMapping = {
             "Syringe ไซริงค์": ["Syringe พลาสติก 3 ml", "Syringe พลาสติก 5 ml", "Syringe พลาสติก 10 ml", "Syringe พลาสติก 20 ml", "Syringe แก้ว 5ml", "Syringe แก้ว 10ml"],
@@ -842,6 +896,20 @@
             });
 
             let html = '';
+
+            // 🎯 ปุ่มคืนทั้งหมด จะโผล่มาเฉพาะหน้า "คืนของ" เท่านั้น
+            if (isReturnMode && inventoryData.length > 0) {
+                html += `
+                <div class="mb-4 bg-green-50 p-3 rounded-xl border border-green-200 flex justify-between items-center shadow-sm">
+                    <div>
+                        <h4 class="text-[11px] font-bold text-green-700">✅ คืนของทั้งหมด</h4>
+                        <p class="text-[9px] text-green-600 mt-0.5">กดปุ่มนี้เพื่อคืนอุปกรณ์เต็มจำนวนทุกรายการ</p>
+                    </div>
+                    <button onclick="setReturnAllMax()" class="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-all">
+                        คืนทั้งหมด
+                    </button>
+                </div>`;
+            }
 
             categoryOrder.forEach(cat => {
                 if (groupedData[cat] && groupedData[cat].length > 0) {
@@ -904,6 +972,22 @@
             }
             
             // รีเฟรชปุ่มยืนยัน
+            if (typeof validateInv === 'function') validateInv();
+        }
+
+        // 🌟 4. ซ่อมฟังก์ชันคืนของทั้งหมดให้ทำงานได้จริง
+        function setReturnAllMax() {
+            if (!confirm('ยืนยันการกดคืนอุปกรณ์ "เต็มจำนวน" ค้างสายทุกรายการใช่หรือไม่?')) return;
+            
+            inventoryData.forEach(item => {
+                item.selectedQty = item.stock; 
+                const inputEl = document.getElementById(`qty-${item._idx}`);
+                if (inputEl) {
+                    if (inputEl.tagName === 'INPUT') inputEl.value = item.stock;
+                    else inputEl.innerText = item.stock;
+                }
+            });
+            
             if (typeof validateInv === 'function') validateInv();
         }
 

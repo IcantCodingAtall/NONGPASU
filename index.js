@@ -938,50 +938,60 @@ app.get('/api/team-taken-items', async (req, res) => {
 // ==========================================
 // 📦 API 2: บันทึกการเบิก/คืน และส่ง Flex Message (เข้าส่วนตัว + เข้ากลุ่มผ่าน env)
 // ==========================================
+// ==========================================
+// 📦 API 2: บันทึกการเบิก/คืน ป้องกันสต๊อกติดลบ + ซ่อม Flex Message แจ้งเตือน
+// ==========================================
 app.post('/api/inventory-action', express.json(), async (req, res) => {
     try {
-        const { lineId, staffName, date, line, action, items } = req.body;
-        const doc = await getSheetDoc();
+        // 🧹 ฟังก์ชันกรองคำ ป้องกัน undefined ทำ Flex Message พัง
+        const cleanStr = (v, def) => (v === undefined || v === null || String(v).trim() === 'undefined' || String(v).trim() === '') ? def : String(v).trim();
+        const cleanNum = (v) => parseInt(v) || 0;
 
+        const lineId = req.body.lineId;
+        const staffName = cleanStr(req.body.staffName, 'ผู้ปฏิบัติงาน');
+        const date = cleanStr(req.body.date, 'ไม่ระบุวันที่');
+        const line = cleanStr(req.body.line, 'ไม่ระบุสาย');
+        const action = cleanStr(req.body.action, 'ทำรายการ');
+        const items = req.body.items || [];
+
+        const doc = await getSheetDoc();
         const invSheet = doc.sheetsByTitle['Inventory'];
         if (!invSheet) throw new Error("ไม่พบแท็บคลังสินค้าหลัก Inventory");
-        
-        // 🚨 [ANTI RACE-CONDITION LOGIC] โหลดแถวคลังสินค้ามาตรวจสอบก่อนเบิกเงินป้อนเข้าชีทเพื่อกันสต๊อกเกิน
+
+        // 🚨 [ANTI RACE-CONDITION LOGIC] เช็คสต๊อกก่อนเซฟ
         const invRows = await invSheet.getRows();
-        
         if (action === 'เบิกของ') {
             for (let item of items) {
-                const targetRow = invRows.find(r => r.get('รายการ') === item.name);
+                const targetRow = invRows.find(r => r.get('รายการ') === cleanStr(item.name, ''));
                 if (targetRow) {
                     const currentStock = parseInt(targetRow.get('จำนวน')) || 0;
-                    if (currentStock < parseInt(item.qty)) {
-                        // ส่ง Error 400 เด้งกลับไปที่หน้าจอ LIFF แจ้งเตือนน้องๆ ทันที ของชิ้นนี้หมดแล้ว
-                        return res.status(400).json({ success: false, message: `⚠️ อุปกรณ์ไม่พอเบิก! [${item.name}] ในคลังเหลือเพียง ${currentStock} ${item.unit} กรุณารีเฟรชยอดใหม่ครับ` });
+                    if (currentStock < cleanNum(item.qty)) {
+                        return res.status(400).json({ success: false, message: `⚠️ อุปกรณ์ไม่พอเบิก! [${item.name}] ในคลังเหลือเพียง ${currentStock} ${item.unit}` });
                     }
                 }
             }
         }
 
-        // 2. ถ้าผ่านด่านตรวจสอบสต๊อกแล้ว ค่อยรันลูปจดลงหน้า Log ประวัติเบิกคืนจริง
+        // 2. รันลูปจดลงหน้า Log
         if (action === 'เบิกของ') {
             const sheet = doc.sheetsByTitle['Log_Takeout'];
             for (let item of items) {
-                await sheet.addRow({ 'Timestamp': new Date().toLocaleString('th-TH'), 'Staff': staffName, 'Item_Name': item.name, 'Amount_Taken': item.qty, 'LINE_ID': lineId, 'Status': 'ยังไม่คืน', 'Camp_Date': date, 'Camp_Line': line });
+                await sheet.addRow({ 'Timestamp': new Date().toLocaleString('th-TH'), 'Staff': staffName, 'Item_Name': cleanStr(item.name, 'อุปกรณ์'), 'Amount_Taken': cleanNum(item.qty), 'LINE_ID': lineId, 'Status': 'ยังไม่คืน', 'Camp_Date': date, 'Camp_Line': line });
             }
         } else if (action === 'คืนของ') {
             const sheet = doc.sheetsByTitle['Log_Return'];
             for (let item of items) {
-                await sheet.addRow({ 'Timestamp': new Date().toLocaleString('th-TH'), 'LINE_ID': lineId, 'Item_Name': item.name, 'Amount_Returned': item.qty, 'Amount_Used': 0, 'Unit': item.unit, 'Camp_Date': date, 'Camp_Line': line });
+                await sheet.addRow({ 'Timestamp': new Date().toLocaleString('th-TH'), 'LINE_ID': lineId, 'Item_Name': cleanStr(item.name, 'อุปกรณ์'), 'Amount_Returned': cleanNum(item.qty), 'Amount_Used': 0, 'Unit': cleanStr(item.unit, 'ชิ้น'), 'Camp_Date': date, 'Camp_Line': line });
             }
         }
 
         // 3. ปรับเปลี่ยนอัปเดตตัวสต๊อกจริงในหน้าคลัง
         for (let item of items) {
-            const targetRow = invRows.find(r => r.get('รายการ') === item.name);
+            const targetRow = invRows.find(r => r.get('รายการ') === cleanStr(item.name, ''));
             if (targetRow) {
                 let currentStock = parseInt(targetRow.get('จำนวน')) || 0;
-                if (action === 'เบิกของ') currentStock -= parseInt(item.qty);
-                else if (action === 'คืนของ') currentStock += parseInt(item.qty);
+                if (action === 'เบิกของ') currentStock -= cleanNum(item.qty);
+                else if (action === 'คืนของ') currentStock += cleanNum(item.qty);
                 
                 targetRow.set('จำนวน', currentStock < 0 ? 0 : currentStock);
                 await targetRow.save();
@@ -994,8 +1004,8 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
         let itemListHtml = items.map(i => ({
             type: "box", layout: "horizontal", margin: "md",
             contents: [
-                { type: "text", text: i.name, size: "sm", color: "#334155", flex: 3, wrap: true },
-                { type: "text", text: `${i.qty} ${i.unit}`, size: "sm", color: colorMain, weight: "bold", align: "end", flex: 1 }
+                { type: "text", text: cleanStr(i.name, 'อุปกรณ์'), size: "sm", color: "#334155", flex: 3, wrap: true },
+                { type: "text", text: `${cleanNum(i.qty)} ${cleanStr(i.unit, 'ชิ้น')}`, size: "sm", color: colorMain, weight: "bold", align: "end", flex: 1 }
             ]
         }));
 
@@ -1008,15 +1018,28 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
             }
         };
 
-        // ยิงส่งทั้ง แชทส่วนตัว และ ไลน์กลุ่ม (ตามข้อ 1)
-        try { await client.pushMessage({ to: lineId, messages: [flexMsg] }); } catch(e) {}
+        // ยิงส่ง แชทส่วนตัว (เพิ่มตัวจับ Error)
+        if (lineId && lineId !== "TEST_ENV") {
+            try { await client.pushMessage({ to: lineId, messages: [flexMsg] }); } 
+            catch(e) { console.error("🚨 ยิง Flex ส่วนตัวล้มเหลว:", e.message); }
+        }
+
+        // ยิงส่ง ไลน์กลุ่ม (เพิ่มตัวจับ Error)
         const groupId = process.env.LINE_GROUP_ID;
-        if (groupId) { try { await client.pushMessage({ to: groupId, messages: [flexMsg] }); } catch(err) {} }
+        if (groupId) { 
+            try { 
+                await client.pushMessage({ to: groupId, messages: [flexMsg] }); 
+                console.log(`✅ ส่งแจ้งเตือน ${action} เข้ากลุ่มปศุสัตว์เรียบร้อย!`);
+            } 
+            catch(err) { console.error("🚨 ยิง Flex เข้ากลุ่มล้มเหลว:", err.message); } 
+        }
 
         res.json({ success: true });
-    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    } catch (e) { 
+        console.error("Inventory Save Error:", e);
+        res.status(500).json({ success: false, message: e.message }); 
+    }
 });
-
 
 // ==========================================
 // ==========================================

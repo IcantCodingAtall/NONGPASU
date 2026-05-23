@@ -260,6 +260,20 @@
             if(groupedData[cat]) groupedData[cat].push(item);
         });
 
+        // 🎯 เพิ่มปุ่มคืนทั้งหมดไว้ด้านบนสุดของรายการของ
+        if (isReturnMode && inventoryData.length > 0) {
+            container.insertAdjacentHTML('beforeend', `
+            <div style="margin-bottom: 15px; background: #ecfdf5; padding: 12px; border-radius: 10px; border: 1px solid #a7f3d0; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <div>
+                    <div style="font-size: 13px; font-weight: bold; color: #047857;">✅ คืนของทั้งหมด</div>
+                    <div style="font-size: 11px; color: #059669; margin-top: 2px;">กดปุ่มนี้เพื่อคืนเต็มจำนวนทุกรายการ</div>
+                </div>
+                <button onclick="setReturnAllMax()" style="background: #059669; color: white; border: none; padding: 8px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-family: inherit;">
+                    คืนทั้งหมด
+                </button>
+            </div>`);
+        }
+
         categoryOrder.forEach(cat => {
             if (groupedData[cat].length > 0) {
                 navContainer.insertAdjacentHTML('beforeend', `<div class="cat-chip" onclick="scrollToCat('${cat}')">${cat}</div>`);
@@ -291,22 +305,25 @@
         });
     }
 
+    function setReturnAllMax() {
+        if (!confirm('ยืนยันการกดคืนอุปกรณ์ "เต็มจำนวน" ค้างสายทุกรายการใช่หรือไม่?')) return;
+        inventoryData.forEach(item => {
+            item.selectedQty = item.stock; 
+            const inputEl = document.getElementById(`qty-${item.originalIndex}`);
+            if (inputEl) {
+                if (inputEl.tagName === 'INPUT') inputEl.value = item.stock;
+                else inputEl.innerText = item.stock;
+            }
+        });
+        if (typeof validateForm === 'function') validateForm(); 
+    }
+
     function scrollToCat(catName) {
         const section = document.getElementById(`sec-${catName}`);
         if (section) {
             const y = section.getBoundingClientRect().top + window.scrollY - 80; 
             window.scrollTo({ top: y, behavior: 'smooth' });
         }
-    }
-
-    function setReturnAllMax() {
-        if (!confirm('ยืนยันการทำรายการกดคืนอุปกรณ์ "เต็มจำนวน" ทุกรายการใช่หรือไม่?')) return;
-        inventoryData.forEach(item => {
-            item.selectedQty = item.stock; 
-            const inputEl = document.getElementById(`qty-${item.originalIndex}`);
-            if (inputEl) inputEl.value = item.stock;
-        });
-        validateForm(); 
     }
 
     // 🌟 ซ่อมแซมปุ่มบวกลบให้หาตำแหน่งเจอ 100%
