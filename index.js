@@ -504,25 +504,36 @@ app.post('/api/liff/lab', async (req, res) => {
 // ==========================================
 // 📦 API ดึงข้อมูลคลังสินค้ามาโชว์ในเว็บ
 // ==========================================
+// ==========================================
+// 📦 API ดึงข้อมูลคลังสินค้า (แก้ไขให้ตรงกับคอลัมน์ชีทเป๊ะๆ)
+// ==========================================
 app.get('/api/inventory', async (req, res) => {
     try {
         const doc = await getSheetDoc();
         const sheet = doc.sheetsByTitle['Inventory'];
-        if (!sheet) return res.json([]);
+        
+        if (!sheet) {
+            console.error("❌ หาชีทชื่อ 'Inventory' ไม่เจอ (ลองเช็คว่ามีเว้นวรรคซ่อนอยู่ไหม)");
+            return res.json([]);
+        }
         
         const rows = await sheet.getRows();
+        console.log(`📦 ดึงข้อมูลคลัง Inventory สำเร็จ! พบทั้งหมด ${rows.length} แถว`);
         
-        // ดึงให้ตรงกับชื่อหัวคอลัมน์ในชีทเป๊ะๆ: 'รายการ', 'จำนวน', 'Unit', 'Image_URL'
+        // ดึงให้ตรงกับชื่อหัวคอลัมน์ในชีทพี่เป๊ะๆ: 'รายการ', 'จำนวน', 'Unit', 'Image_URL'
         const inventoryList = rows.map(r => ({
-            name: r.get('รายการ') || 'ไม่ทราบชื่อ',
+            name: r.get('รายการ') ? r.get('รายการ').trim() : 'ไม่ทราบชื่อ',
             stock: parseInt(r.get('จำนวน')) || 0,
-            unit: r.get('Unit') || 'ชิ้น',
-            image: r.get('Image_URL') || 'https://cdn-icons-png.flaticon.com/512/1516/1516104.png'
+            unit: r.get('Unit') ? r.get('Unit').trim() : 'ชิ้น',
+            image: r.get('Image_URL') || ''
         }));
         
-        res.json(inventoryList);
+        // กรองเอาเฉพาะบรรทัดที่กรอกชื่อรายการแล้วเท่านั้น ป้องกันบรรทัดว่างติดมา
+        const validItems = inventoryList.filter(i => i.name !== 'ไม่ทราบชื่อ' && i.name !== '');
+        
+        res.json(validItems);
     } catch(e) {
-        console.error("Fetch Inventory Error:", e);
+        console.error("🚨 Fetch Inventory Error:", e);
         res.status(500).json([]);
     }
 });
@@ -1008,12 +1019,21 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
 
 
 // ==========================================
+// ==========================================
+// 📝 API 3: บันทึกหัตถการ & แก้ไขคำว่า undefined ให้เป็น 0 แบบถาวร (Failsafe)
+// ==========================================
 app.post('/api/liff/procedure', express.json(), async (req, res) => {
     try {
-        // 🧹 ฟังก์ชันกรองตัวเลขและข้อความ ป้องกัน undefined
-        const cleanNum = (v) => parseInt(v) || 0;
+        console.log("📥 [API หัตถการ] ข้อมูลดิบที่ส่งมาจากฟอร์มหน้าเว็บ:", JSON.stringify(req.body));
+
+        // 🧹 ฟังก์ชันกรองตัวเลขและข้อความ ป้องกันคำว่า 'undefined' หลุดรอดไปในระบบ
+        const cleanNum = (v) => {
+            if (v === undefined || v === null || String(v).trim() === 'undefined' || String(v).trim() === '') return 0;
+            return parseInt(v) || 0;
+        };
         const cleanStr = (v, def) => (v === undefined || v === null || String(v).trim() === '' || String(v).trim() === 'undefined') ? def : String(v).trim();
 
+        // 👥 ดึงข้อมูลทั่วไป
         const lineId = req.body.lineId;
         const staffName = cleanStr(req.body.staffName, 'ผู้ปฏิบัติงาน');
         const date = cleanStr(req.body.date, '-');
@@ -1022,25 +1042,32 @@ app.post('/api/liff/procedure', express.json(), async (req, res) => {
         const ownerPhone = cleanStr(req.body.ownerPhone, '-');
         const ownerAddress = cleanStr(req.body.ownerAddress, '-');
         
-        const cows = cleanNum(req.body.cows);
-        const buffs = cleanNum(req.body.buffs);
-        const goats = cleanNum(req.body.goats);
-        const sheeps = cleanNum(req.body.sheeps);
+        // 🐄 ดึงจำนวนสัตว์ (ดักรองรับทุกชื่อตัวแปรเผื่อหน้าเว็บส่งมาสลับกัน)
+        const cows = cleanNum(req.body.cows || req.body.cow);
+        const buffs = cleanNum(req.body.buffs || req.body.buff || req.body.buffalo);
+        const goats = cleanNum(req.body.goats || req.body.goat);
+        const sheeps = cleanNum(req.body.sheeps || req.body.sheep);
+
+        // 🦠 ดึงข้อมูลยาและวัคซีน
         const fmd = cleanNum(req.body.fmd);
         const lsd = cleanNum(req.body.lsd);
-        const edta = cleanNum(req.body.edta); 
-        const clot = cleanNum(req.body.clot); 
-        const iver = cleanNum(req.body.iver);
-        const alben = cleanNum(req.body.alben);
-        const chloro = cleanNum(req.body.chloro);
-        const dexam = cleanNum(req.body.dexam);
-        const vitb = cleanNum(req.body.vitb); 
+        const iver = cleanNum(req.body.iver || req.body.ivermectin);
+        const alben = cleanNum(req.body.alben || req.body.albendazole);
+        const chloro = cleanNum(req.body.chloro || req.body.chloramine);
+        const dexam = cleanNum(req.body.dexam || req.body.dexamvet);
+
+        // 💉 🕵️‍♂️ สับรางจับคู่ตัวแปรเก่า-ใหม่ ป้องกันบัค Undefined 100%
+        // หน้าเว็บอาจส่งมาเป็น edta/clot หรือส่งรวมมาเป็นชื่อ blood หน้าหลังบ้านรองรับหมดครับ
+        const edta = cleanNum(req.body.edta || req.body.EDTA_Tube || req.body.blood); 
+        const clot = cleanNum(req.body.clot || req.body.Clot_Tube || 0); 
+        const feces = cleanNum(req.body.feces || req.body.Feces || 0);
+        const vitb = cleanNum(req.body.vitb || req.body.vitamin || req.body.vitaminb || req.body.VitaminB);
 
         const doc = await getSheetDoc();
         const sheet = doc.sheetsByTitle['Log_Procedures'];
         
         if (sheet) {
-            // 🌟 เซฟลง Google Sheet (ชื่อคอลัมน์เป๊ะตามรูปเป๊ะๆ แน่นอน)
+            // 🌟 บันทึกลงคอลัมน์ชีทของพี่เป๊ะๆ ข้อมูลลงล็อกสมบูรณ์แบบ
             await sheet.addRow({ 
                 'Timestamp': new Date().toLocaleString('th-TH'), 
                 'Staff_Name': staffName, 
@@ -1055,7 +1082,7 @@ app.post('/api/liff/procedure', express.json(), async (req, res) => {
                 'Sheep': sheeps, 
                 'EDTA_Tube': edta, 
                 'Clot_Tube': clot, 
-                'Feces': 0,
+                'Feces': feces,
                 'FMD': fmd, 
                 'LSD': lsd, 
                 'Ivermectin': iver, 
@@ -1068,13 +1095,12 @@ app.post('/api/liff/procedure', express.json(), async (req, res) => {
         }
 
         const totalAnim = cows + buffs + goats + sheeps;
-        
         const othersArr = [];
         if (chloro > 0) othersArr.push(`Chloro (${chloro})`);
         if (dexam > 0) othersArr.push(`Dexam (${dexam})`);
         const othersStr = othersArr.length > 0 ? othersArr.join(', ') : '-';
 
-        // 🎨 สร้าง Flex Message อันใหม่ล่าสุด!
+        // 🎨 ปรับปรุง Flex Message โครงสร้างใหม่ ไม่เรียกใช้ชื่อตัวแปรดิบที่พัง ดึงจากเครื่องกรองคำโดยตรง
         const flexMsg = {
             type: "flex", altText: `ยอดหัตถการ ${line}`,
             contents: {
@@ -1090,12 +1116,11 @@ app.post('/api/liff/procedure', express.json(), async (req, res) => {
                         { type: "text", text: `วัว:${cows} | ควาย:${buffs} | แพะ:${goats} | แกะ:${sheeps}`, size: "xs", color: "#94a3b8", margin: "sm" },
                         { type: "separator", margin: "md" },
                         
-                        // 💉 ซ่อมคำว่า Blood / Feces ให้ถูกต้อง
-                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "💉 Blood (EDTA/Clot)", size: "sm", color: "#334155" }, { type: "text", text: `${edta} / ${clot} หลอด`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
+                        // รายการแล็บและเวชภัณฑ์ ปลอดภัยไร้คำว่า undefined
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "💉 Blood (EDTA / Clot)", size: "sm", color: "#334155" }, { type: "text", text: `${edta} / ${clot} หลอด`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "💩 Feces Sample", size: "sm", color: "#334155" }, { type: "text", text: `${feces} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
                         { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "🦠 FMD / LSD", size: "sm", color: "#334155" }, { type: "text", text: `${fmd} / ${lsd} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
                         { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "💊 Iver / Alben", size: "sm", color: "#334155" }, { type: "text", text: `${iver} / ${alben} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
-                        
-                        // 🧪 ซ่อมคำว่า Vitamin ให้ถูกต้อง
                         { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "🧪 Vitamin B", size: "sm", color: "#334155" }, { type: "text", text: `${vitb} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
                         
                         { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "📌 Others", size: "sm", color: "#334155" }, { type: "text", text: othersStr, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
@@ -1105,10 +1130,10 @@ app.post('/api/liff/procedure', express.json(), async (req, res) => {
             }
         };
 
-        // 1. ยิงเข้าแชทส่วนตัวคนกรอก
+        // ส่งเข้าแชทส่วนตัวคนคีย์ข้อมูล
         try { await client.pushMessage({ to: lineId, messages: [flexMsg] }); } catch(e) {}
         
-        // 2. ยิงเข้ากลุ่มไลน์ปศุสัตว์
+        // ส่งเข้าไลน์กลุ่มปศุสัตว์หลักตามค่าที่ผูกใน env
         const groupId = process.env.LINE_GROUP_ID;
         if (groupId) { 
             try { await client.pushMessage({ to: groupId, messages: [flexMsg] }); } catch(err) {} 

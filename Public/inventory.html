@@ -132,9 +132,9 @@
     let inventoryData = [];
     let isReturnMode = false;
     let myLineId = "";
+    let myDisplayName = "หมอสัตวแพทย์";
 
-    // 🆕 อัปเดตตารางจับคู่กลุ่มสิ่งของตรงล็อกล่าสุด 100% ปลอดภัย ไร้กังวล
-    // 🆕 อัปเดตตารางจับคู่กลุ่มสิ่งของ (เพิ่ม "อุปกรณ์จับบังคับ" เข้ามาแล้ว)
+    // 🆕 อัปเดตตารางจับคู่กลุ่มสิ่งของ (อัปเดตล่าสุด)
     const categoryMapping = {
         "Syringe ไซริงค์": ["Syringe พลาสติก 3 ml", "Syringe พลาสติก 5 ml", "Syringe พลาสติก 10 ml", "Syringe พลาสติก 20 ml", "Syringe แก้ว 5ml", "Syringe แก้ว 10ml"],
         "Needle เข็ม": ["Needle พลาสติก 18Gx1", "Needle พลาสติก 18Gx1.5", "Needle พลาสติก 20Gx1", "Needle พลาสติก 21Gx1", "Needle พลาสติก 22Gx1", "Needle เหล็ก 18x1", "Needle เหล็ก 18x3/4", "Needle เหล็ก 18x1.5"],
@@ -146,7 +146,6 @@
         "อุปกรณ์ทั่วไป": ["หม้อต้มไซริงค์", "แปรงขัดไซริงค์" , "คัมภีร์ปศุสัตว์", "O ring"]
     };
     
-    // 🆕 อัปเดตลำดับการแสดงผล (แทรก "อุปกรณ์จับบังคับ" ต่อจากกลุ่มเข็ม)
     const categoryOrder = ["Syringe ไซริงค์", "Needle เข็ม", "อุปกรณ์จับบังคับ", "อุปกรณ์หัตถการ", "อุปกรณ์จดบันทึก", "อุปกรณ์ Lab", "เวชภัณฑ์", "อุปกรณ์ทั่วไป", "อื่นๆ"];
 
     function fixImageUrl(url) {
@@ -165,82 +164,92 @@
         return "อื่นๆ"; 
     }
 
-    async function fetchInventory() {
-        try {
-            const urlParams = new URLSearchParams(window.location.search);
-            isReturnMode = urlParams.get('page') === 'return';
-
-            let apiUrl = '/api/inventory';
-            if (isReturnMode) {
-                apiUrl = `/api/my-taken-items?userId=${myLineId}`;
-                document.getElementById("mainTitle").innerText = "🔙 คืนอุปกรณ์ออกสาย";
-                document.getElementById("loadingText").innerText = "⏳ กำลังดึงรายการที่คุณเบิกไป...";
-                document.getElementById("modalTitle").innerText = "📝 สรุปของเหลือกลับมา";
-                document.getElementById("summaryLabel").innerHTML = "ระบุคืน: <span id='totalItems'>0</span> รายการ";
-                document.getElementById("labelDate").innerText = "📅 วันที่ออกค่าย (กรอกไว้แล้ว):";
-                document.getElementById("labelLine").innerText = "🚐 สายปฏิบัติการ (กรอกไว้แล้ว):";
-            } else {
-                document.getElementById("searchBox").style.display = "block";
-            }
-
-            const response = await fetch(apiUrl, { headers: { 'ngrok-skip-browser-warning': 'true' } });
-            const data = await response.json();
-            
-            if (data.error) throw new Error(data.error);
-
-            if (isReturnMode) {
-                inventoryData = data.items.map((item, index) => ({ ...item, selectedQty: 0, originalIndex: index }));
-                
-                if (data.campDate) {
-                    document.getElementById("campDate").value = data.campDate;
-                    document.getElementById("campDate").disabled = true;
-                }
-                if (data.campLine) {
-                    document.getElementById("campLine").value = data.campLine;
-                    document.getElementById("campLine").disabled = true;
-                }
-            } else {
-                inventoryData = data.map((item, index) => ({ ...item, selectedQty: 0, originalIndex: index }));
-            }
-            
-            document.getElementById("loadingText").style.display = "none";
-
-            if (inventoryData.length === 0) {
-                const msg = isReturnMode ? "🎉 คุณไม่มีรายการอุปกรณ์ค้างคืนในระบบครับ" : "📦 ไม่พบข้อมูลอุปกรณ์ในคลังสินค้า";
-                const emptyView = document.getElementById("emptyView");
-                emptyView.innerText = msg;
-                emptyView.style.display = "block";
-            } else {
-                renderGroupedItems();
-                validateForm(); 
-                
-                if (isReturnMode) {
-                    document.getElementById("returnAllBox").style.display = "block";
-                }
-            }
-        } catch (error) {
-            document.getElementById("loadingText").innerText = `❌ ข้อผิดพลาด: ${error.message}`;
-        }
-    }
-
     async function initializeLiff() {
-        // ⚠️ รหัส LIFF ID คลังหลักของพี่หมอ Earth ล็อกไว้ตรงตัวเรียบร้อยครับ
         await liff.init({ liffId: "2010124815-zgdc48Ze" }); 
         if (liff.isLoggedIn() || liff.isInClient()) {
             const profile = await liff.getProfile();
             myLineId = profile.userId;
-            fetchInventory();
+            myDisplayName = profile.displayName;
+            setupMode();
         } else {
             liff.login();
         }
     }
     initializeLiff();
 
+    function setupMode() {
+        const urlParams = new URLSearchParams(window.location.search);
+        isReturnMode = urlParams.get('page') === 'return';
+
+        if (isReturnMode) {
+            document.getElementById("mainTitle").innerText = "🔙 คืนอุปกรณ์ออกสาย";
+            document.getElementById("loadingText").innerText = "💡 กรุณาเลือกวันที่และสายปฏิบัติการ เพื่อดึงยอดค้างของสาย";
+            document.getElementById("modalTitle").innerText = "📝 สรุปของเหลือกลับมา";
+            document.getElementById("summaryLabel").innerHTML = "ระบุคืน: <span id='totalItems'>0</span> รายการ";
+        } else {
+            document.getElementById("searchBox").style.display = "block";
+            fetchInventoryData('/api/inventory');
+        }
+    }
+
+    // 🌟 ดึงข้อมูลจาก API ใหม่ที่เสถียร 100%
+    async function fetchInventoryData(url) {
+        document.getElementById("loadingText").style.display = "block";
+        document.getElementById("emptyView").style.display = "none";
+        document.getElementById("itemsContainer").innerHTML = '';
+        document.getElementById("catNav").innerHTML = '';
+        
+        try {
+            const response = await fetch(url, { headers: { 'ngrok-skip-browser-warning': 'true' } });
+            const data = await response.json();
+            
+            let rawItems = isReturnMode ? (data.items || []) : (Array.isArray(data) ? data : []);
+            inventoryData = rawItems.map((item, index) => ({ ...item, selectedQty: 0, originalIndex: index }));
+            
+            document.getElementById("loadingText").style.display = "none";
+
+            if (inventoryData.length === 0) {
+                const msg = isReturnMode ? "🎉 สายของคุณไม่มีรายการอุปกรณ์ค้างคืนในระบบครับ" : "📦 ไม่พบข้อมูลอุปกรณ์ในคลังสินค้า";
+                const emptyView = document.getElementById("emptyView");
+                emptyView.innerText = msg;
+                emptyView.style.display = "block";
+            } else {
+                renderGroupedItems();
+                validateForm(); 
+                if (isReturnMode) document.getElementById("returnAllBox").style.display = "block";
+            }
+        } catch (error) {
+            document.getElementById("loadingText").innerText = `❌ ข้อผิดพลาด: ${error.message}`;
+        }
+    }
+
+    // 🌟 หน้าคืนของ ต้องรอให้เลือกวันที่และสายก่อน ค่อยวิ่งไปดึงข้อมูลมารวมกัน
+    function onDropdownChange() {
+        const date = document.getElementById("campDate").value;
+        const line = document.getElementById("campLine").value;
+        
+        if (isReturnMode) {
+            if (date && line) {
+                document.getElementById("loadingText").innerText = "⏳ กำลังดึงรายการค้างเบิกของสาย...";
+                fetchInventoryData(`/api/team-taken-items?date=${date}&line=${line}`);
+            } else {
+                document.getElementById("itemsContainer").innerHTML = '';
+                document.getElementById("catNav").innerHTML = '';
+                document.getElementById("returnAllBox").style.display = "none";
+                document.getElementById("loadingText").innerText = "💡 กรุณาเลือกวันที่และสายปฏิบัติการ เพื่อดึงยอดค้างคลัง";
+                document.getElementById("loadingText").style.display = "block";
+            }
+        }
+        validateForm();
+    }
+    
+    document.getElementById("campDate").onchange = onDropdownChange;
+    document.getElementById("campLine").onchange = onDropdownChange;
+
     function renderGroupedItems() {
         const container = document.getElementById("itemsContainer");
         const navContainer = document.getElementById("catNav");
-        container.innerHTML = '';
-        navContainer.innerHTML = '';
+        container.innerHTML = ''; navContainer.innerHTML = '';
 
         const groupedData = {};
         categoryOrder.forEach(cat => groupedData[cat] = []);
@@ -255,7 +264,7 @@
                 navContainer.insertAdjacentHTML('beforeend', `<div class="cat-chip" onclick="scrollToCat('${cat}')">${cat}</div>`);
                 let sectionHtml = `<div class="category-section" id="sec-${cat}"><h3 class="category-title">${cat}</h3>`;
                 groupedData[cat].forEach(item => {
-                    const labelText = isReturnMode ? `เคยเบิกไป: ${item.stock}` : `คงเหลือ: ${item.stock}`;
+                    const labelText = isReturnMode ? `ค้างในสาย: ${item.stock}` : `คงเหลือ: ${item.stock}`;
                     const stockClass = (!isReturnMode && item.stock <= 5) ? 'low' : '';
                     
                     sectionHtml += `
@@ -291,7 +300,6 @@
 
     function setReturnAllMax() {
         if (!confirm('ยืนยันการทำรายการกดคืนอุปกรณ์ "เต็มจำนวน" ทุกรายการใช่หรือไม่?')) return;
-        
         inventoryData.forEach(item => {
             item.selectedQty = item.stock; 
             const inputEl = document.getElementById(`qty-${item.originalIndex}`);
@@ -305,7 +313,7 @@
         let newQty = item.selectedQty + change;
         if (newQty < 0) newQty = 0;
         if (newQty > item.stock) {
-            const alertMsg = isReturnMode ? `คุณเบิกไอเทมนี้ไปทั้งหมดแค่ ${item.stock} ${item.unit} ครับ` : `ของในคลังมีแค่อยู่ ${item.stock} ${item.unit} ครับ`;
+            const alertMsg = isReturnMode ? `ค้างอยู่ในสายแค่ ${item.stock} ${item.unit} ครับ` : `ของในคลังมีเหลืออยู่ ${item.stock} ${item.unit} ครับ`;
             alert(alertMsg);
             newQty = item.stock;
         }
@@ -320,11 +328,8 @@
         const totalItems = inventoryData.filter(i => i.selectedQty > 0).length;
         
         document.getElementById("totalItems").innerText = totalItems;
-        if (campDate !== "" && campLine !== "" && totalItems > 0) {
-            document.getElementById("btnSubmit").disabled = false;
-        } else {
-            document.getElementById("btnSubmit").disabled = true;
-        }
+        if (campDate !== "" && campLine !== "" && totalItems > 0) document.getElementById("btnSubmit").disabled = false;
+        else document.getElementById("btnSubmit").disabled = true;
     }
 
     function filterItems() {
@@ -351,7 +356,7 @@
         summaryList.innerHTML = ''; 
 
         selectedItems.forEach(item => {
-            const labelWord = isReturnMode ? "เหลือกลับมา" : "เบิกจำนวน";
+            const labelWord = isReturnMode ? "คืนจำนวน" : "เบิกจำนวน";
             summaryList.insertAdjacentHTML('beforeend', `
                 <div class="summary-item">
                     <div class="summary-name">${item.name}</div>
@@ -362,29 +367,55 @@
         document.getElementById("summaryModal").style.display = "flex";
     }
 
-    function closeSummaryModal() {
-        document.getElementById("summaryModal").style.display = "none";
-    }
+    function closeSummaryModal() { document.getElementById("summaryModal").style.display = "none"; }
 
+    // 🌟 เปลี่ยนมายิง API ตรงๆ เหมือนหน้า Portal เลยครับ จะได้เช็คสต๊อกชนกันได้
     async function submitForm() {
         const confirmBtn = document.querySelector('.btn-confirm');
-        confirmBtn.innerText = "กำลังบันทึก...";
+        confirmBtn.innerText = "⏳ กำลังบันทึก...";
         confirmBtn.disabled = true;
 
         const campDate = document.getElementById("campDate").value;
         const campLine = document.getElementById("campLine").value;
         const selectedItems = inventoryData.filter(i => i.selectedQty > 0);
         
-        const payload = selectedItems.map(i => `${i.name}|${i.selectedQty}|${i.unit}`).join(',');
-        const cmdHeader = isReturnMode ? "#คืนของรวม" : "#เบิกของรวม";
-        const messageText = `${cmdHeader}\nDate=${campDate}\nLine=${campLine}\nItems=${payload}`;
+        const payloadItems = selectedItems.map(i => ({
+            name: i.name,
+            qty: i.selectedQty,
+            unit: i.unit
+        }));
 
-        if (liff.isInClient()) {
-            await liff.sendMessages([{ type: "text", text: messageText }]);
-            liff.closeWindow();
-        } else {
-            alert(`[โหมดเบราว์เซอร์] จำลองการส่ง:\n\n${messageText}`);
-            closeSummaryModal();
+        try {
+            const res = await fetch('/api/inventory-action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    lineId: myLineId,
+                    staffName: myDisplayName,
+                    date: campDate,
+                    line: campLine,
+                    action: isReturnMode ? 'คืนของ' : 'เบิกของ',
+                    items: payloadItems
+                })
+            });
+
+            const result = await res.json();
+            if (!res.ok || !result.success) {
+                throw new Error(result.message || "เกิดข้อผิดพลาดจากเซิร์ฟเวอร์ หรืออุปกรณ์ในคลังไม่พอเบิก");
+            }
+
+            alert(`✅ บันทึกรายการ${isReturnMode ? 'คืน' : 'เบิก'}สำเร็จ!`);
+            if (liff.isInClient()) {
+                liff.closeWindow();
+            } else {
+                closeSummaryModal();
+                confirmBtn.innerText = "✅ ยืนยันข้อมูล";
+                confirmBtn.disabled = false;
+                window.location.reload();
+            }
+        } catch (e) {
+            console.error(e);
+            alert("❌ การส่งล้มเหลว: " + e.message + "\n(กรุณารีเฟรชหน้าเว็บเพื่อดึงยอดสต๊อกล่าสุด)");
             confirmBtn.innerText = "✅ ยืนยันข้อมูล";
             confirmBtn.disabled = false;
         }

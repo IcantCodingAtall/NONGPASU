@@ -48,12 +48,12 @@
 </head>
 <body>
 
-    <div class="flex items-center justify-between p-4 bg-white border-b border-slate-100 shadow-sm rounded-b-2xl">
+    <div class="flex items-center justify-between p-4 bg-[#00246B] border-b border-slate-100/10 shadow-sm rounded-b-2xl">
             <div class="flex items-center gap-2">
-                <div id="staff-name-display" class="text-xs font-bold text-slate-700">
+                <div id="staff-name-display" class="text-xs font-bold text-blue-50">
                     </div>
             </div>
-            <div class="w-9 h-9 bg-gradient-to-tr from-[#00246B] to-blue-600 rounded-xl flex items-center justify-center shadow-md shadow-blue-100">
+            <div class="w-9 h-9 bg-gradient-to-tr from-[#F8B500] to-yellow-500 rounded-xl flex items-center justify-center shadow-md shadow-amber-100">
                 <span class="text-lg">🩺</span>
             </div>
         </div>
@@ -394,25 +394,42 @@
         // 4. DASHBOARD LOGIC
         async function fetchDashboard() {
             try {
-                const res = await fetch('/api/dashboard');
+                const res = await fetch('/api/dashboard', { headers: { 'ngrok-skip-browser-warning': 'true' }});
                 const data = await res.json();
 
+                // 🌟 ซ่อมบัคแดชบอร์ดค้าง: เช็คก่อนว่ามี object animals ส่งมาไหม ถ้าไม่มีให้ใช้ {} ป้องกันเว็บพัง
+                const animalsData = data.animals || {};
+                
                 // สัตว์
-                const c = parseInt(data.animals['วัว']||0); const b = parseInt(data.animals['ควาย']||0); 
-                const g = parseInt(data.animals['แพะ']||0); const s = parseInt(data.animals['แกะ']||0); 
-                const total = c+b+g+s;
+                const c = parseInt(animalsData['วัว']) || 0; 
+                const b = parseInt(animalsData['ควาย']) || 0; 
+                const g = parseInt(animalsData['แพะ']) || 0; 
+                const s = parseInt(animalsData['แกะ']) || 0; 
+                const total = c + b + g + s;
+                
                 document.getElementById('dash-total-animals').innerText = total;
-                document.getElementById('dash-cow').innerText = c; document.getElementById('dash-buff').innerText = b;
-                document.getElementById('dash-goat').innerText = g; document.getElementById('dash-sheep').innerText = s;
+                document.getElementById('dash-cow').innerText = c; 
+                document.getElementById('dash-buff').innerText = b;
+                document.getElementById('dash-goat').innerText = g; 
+                document.getElementById('dash-sheep').innerText = s;
+                
                 if(total > 0) {
                     const p1 = (c/total)*100; const p2 = p1+((b/total)*100); const p3 = p2+((g/total)*100);
                     document.getElementById('animal-chart').style.background = `conic-gradient(#00246B 0% ${p1}%, #F8B500 ${p1}% ${p2}%, #10B981 ${p2}% ${p3}%, #94a3b8 ${p3}% 100%)`;
+                } else {
+                    // ถ้ายังไม่มียอดสัตว์เลย ให้กราฟเป็นสีเทาว่างๆ ไว้
+                    document.getElementById('animal-chart').style.background = `#e2e8f0`;
                 }
 
-                // หัตถการ
+                // หัตถการ (เช็คป้องกันเว็บพังเช่นกัน)
                 const p = data.procedures || {};
                 const mapIds = { 'FMD':'stat-fmd', 'LSD':'stat-lsd', 'EDTA_tube':'stat-edta', 'Clot_tube':'stat-clot', 'Ivermectin':'stat-iver', 'Albendazole':'stat-alben', 'Chloramine':'stat-chloro', 'DexamVet':'stat-dexam', 'VitaminB':'stat-vitb' };
-                for(let key in mapIds) { document.getElementById(mapIds[key]).innerText = p[key] || 0; }
+                for(let key in mapIds) { 
+                    const el = document.getElementById(mapIds[key]);
+                    if(el) el.innerText = p[key] || 0; 
+                }
+
+                // ... (ส่วนโค้ดด้านล่างของ fetchDashboard ปล่อยไว้เหมือนเดิมได้เลยครับ)
 
                 // 🌟 ระบบจัดกลุ่มค้างเบิกเป็นรายสาย (ของใหม่) 🌟
                 const borrowDiv = document.getElementById('dash-borrow-status');
@@ -753,37 +770,38 @@
             }
         }
 
+        // 🌟 ซ่อมบัคหน้าเบิกว่างเปล่า: วาดรายการอุปกรณ์แบบเรียงลงมาเลย ไม่ต้องใช้คอลัมน์หมวดหมู่
         function renderInvItems() {
             const container = document.getElementById('invContainer');
-            if (inventoryData.length === 0) { container.innerHTML = ''; return; }
+            if (!container) return;
 
-            // จัดกลุ่มข้อมูล
-            let grouped = {};
-            inventoryData.forEach(item => {
-                let cat = getCategory(item.name);
-                if (!grouped[cat]) grouped[cat] = [];
-                grouped[cat].push(item);
-            });
-
-            // วาด HTML
-            let html = '';
-            for (let cat in grouped) {
-                html += `<h4 class="text-xs font-bold text-[#00246B] mt-5 mb-2 px-1 border-b pb-1 border-slate-200"><i class="fa-solid fa-box-open mr-1 text-[#F8B500]"></i> ${cat}</h4>`;
-                html += grouped[cat].map(item => `
-                    <div class="mu-card flex items-center p-3 gap-3 mb-2 shadow-sm border-slate-100 relative">
-                        <img src="${item.image || 'https://cdn-icons-png.flaticon.com/512/1516/1516104.png'}" class="w-12 h-12 rounded-xl object-cover bg-slate-50 border border-slate-200">
-                        <div class="flex-1 min-w-0">
-                            <div class="font-bold text-sm text-slate-700 truncate">${item.name}</div>
-                            <div class="text-[10px] text-slate-400 font-medium">${isReturnMode ? 'ค้างเบิก:' : 'ในคลัง:'} <span class="text-blue-600">${item.stock}</span> ${item.unit}</div>
-                        </div>
-                        <div class="flex items-center bg-slate-50 rounded-lg border border-slate-200 h-9">
-                            <button class="w-8 h-full flex items-center justify-center font-bold text-[#00246B] active:bg-slate-200 rounded-l-lg transition-colors" onclick="updQty(${item._idx}, -1)">-</button>
-                            <input type="text" id="qty-${item._idx}" class="w-7 text-center text-sm font-bold bg-transparent outline-none pointer-events-none text-slate-700" value="${item.selectedQty}">
-                            <button class="w-8 h-full flex items-center justify-center font-bold text-[#00246B] active:bg-slate-200 rounded-r-lg transition-colors" onclick="updQty(${item._idx}, 1)">+</button>
+            let html = '<div class="space-y-3 mt-2">';
+            
+            inventoryData.forEach((item) => {
+                // เช็คว่าถ้ารูปไม่มา ให้ใช้รูปกล่องพยาบาลแทน
+                const imgUrl = item.image && item.image.trim() !== '' ? item.image : 'https://cdn-icons-png.flaticon.com/512/1516/1516104.png';
+                
+                html += `
+                <div class="flex items-center justify-between p-3 bg-white rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+                    <div class="flex items-center gap-3 w-2/3">
+                        <img src="${imgUrl}" class="w-12 h-12 object-cover rounded-lg border border-slate-100 shadow-sm shrink-0">
+                        <div class="min-w-0">
+                            <div class="text-xs font-bold text-[#00246B] truncate">${item.name}</div>
+                            <div class="text-[10px] text-slate-500 mt-0.5">
+                                คงเหลือ: <span class="font-bold ${item.stock > 0 ? 'text-[#F8B500]' : 'text-red-500'}">${item.stock}</span> ${item.unit}
+                            </div>
                         </div>
                     </div>
-                `).join('');
-            }
+                    
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button onclick="updateQty(${item._idx}, -1)" class="w-7 h-7 rounded-full bg-slate-100 text-slate-600 font-bold active:bg-slate-200 transition-colors flex items-center justify-center">-</button>
+                        <span id="qty-${item._idx}" class="text-sm font-bold text-[#00246B] w-4 text-center">${item.selectedQty}</span>
+                        <button onclick="updateQty(${item._idx}, 1)" class="w-7 h-7 rounded-full bg-[#00246B] text-white font-bold active:bg-blue-800 transition-colors flex items-center justify-center shadow-sm">+</button>
+                    </div>
+                </div>`;
+            });
+            
+            html += '</div>';
             container.innerHTML = html;
         }
 
