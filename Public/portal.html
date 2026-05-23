@@ -185,7 +185,7 @@
             </div>
 
             <div class="mu-card space-y-4">
-                <h3 class="text-xs font-bold text-[#00246B] border-b pb-2">🐮 หัตถการที่ทำให้กับฟาร์มนี้</h3>
+                <h3 class="text-xs font-bold text-[#00246B] border-b pb-2">🐮 จำนวนสัตว์ที่ทำหัตถการ</h3>
                 <div class="grid grid-cols-4 gap-2 text-center">
                     <div><div class="text-[10px] text-slate-500 mb-1">วัว</div><input type="number" id="c-cow" class="mu-input !p-1 text-center" value="0" min="0"></div>
                     <div><div class="text-[10px] text-slate-500 mb-1">ควาย</div><input type="number" id="c-buff" class="mu-input !p-1 text-center" value="0" min="0"></div>
@@ -193,17 +193,21 @@
                     <div><div class="text-[10px] text-slate-500 mb-1">แกะ</div><input type="number" id="c-sheep" class="mu-input !p-1 text-center" value="0" min="0"></div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-2 text-xs">
-                    <div class="flex justify-between items-center bg-slate-50 p-2 rounded-lg"><span>FMD (ตัว)</span><input type="number" id="h-fmd" class="w-12 text-center border rounded" value="0" min="0"></div>
-                    <div class="flex justify-between items-center bg-slate-50 p-2 rounded-lg"><span>LSD (ตัว)</span><input type="number" id="h-lsd" class="w-12 text-center border rounded" value="0" min="0"></div>
-                    <div class="flex justify-between items-center bg-slate-50 p-2 rounded-lg"><span>EDTA (หลอด)</span><input type="number" id="h-edta" class="w-12 text-center border rounded" value="0" min="0"></div>
-                    <div class="flex justify-between items-center bg-slate-50 p-2 rounded-lg"><span>Clot (หลอด)</span><input type="number" id="h-clot" class="w-12 text-center border rounded" value="0" min="0"></div>
-                    <div class="flex justify-between items-center bg-slate-50 p-2 rounded-lg"><span>Ivermectin</span><input type="number" id="h-iver" class="w-12 text-center border rounded" value="0" min="0"></div>
-                    <div class="flex justify-between items-center bg-slate-50 p-2 rounded-lg"><span>Albendazole</span><input type="number" id="h-alben" class="w-12 text-center border rounded" value="0" min="0"></div>
-                    <div class="flex justify-between items-center bg-slate-50 p-2 rounded-lg"><span>Chloramine</span><input type="number" id="h-chloro" class="w-12 text-center border rounded" value="0" min="0"></div>
-                    <div class="flex justify-between items-center bg-slate-50 p-2 rounded-lg"><span>DexamVet</span><input type="number" id="h-dexam" class="w-12 text-center border rounded" value="0" min="0"></div>
-                    <div class="flex justify-between items-center bg-slate-50 p-2 rounded-lg col-span-2"><span>Vitamin B (ตัว)</span><input type="number" id="h-vitb" class="w-12 text-center border rounded" value="0" min="0"></div>
+                <div class="mb-4">
+                <h3 class="text-[11px] font-bold text-[#00246B] bg-blue-100 px-3 py-1.5 rounded-lg mb-2">💊 2. หัตถการและเวชภัณฑ์</h3>
+                <div class="grid grid-cols-2 gap-2 mt-2">
+                    <div><label class="block text-[10px] text-slate-500 mb-1">EDTA Tube (หลอด)</label><input type="number" id="h-edta" value="0" min="0" class="mu-input !p-1.5 !text-xs text-center"></div>
+                    <div><label class="block text-[10px] text-slate-500 mb-1">Clot Tube (หลอด)</label><input type="number" id="h-clot" value="0" min="0" class="mu-input !p-1.5 !text-xs text-center"></div>
+                    <div><label class="block text-[10px] text-slate-500 mb-1">Feces (ตัว)</label><input type="number" id="h-feces" value="0" min="0" class="mu-input !p-1.5 !text-xs text-center"></div>
+                    <div><label class="block text-[10px] text-slate-500 mb-1">Vitamin B (ตัว)</label><input type="number" id="h-vitb" value="0" min="0" class="mu-input !p-1.5 !text-xs text-center"></div>
+                    <div><label class="block text-[10px] text-slate-500 mb-1">FMD (ตัว)</label><input type="number" id="h-fmd" value="0" min="0" class="mu-input !p-1.5 !text-xs text-center"></div>
+                    <div><label class="block text-[10px] text-slate-500 mb-1">LSD (ตัว)</label><input type="number" id="h-lsd" value="0" min="0" class="mu-input !p-1.5 !text-xs text-center"></div>
+                    <div><label class="block text-[10px] text-slate-500 mb-1">Ivermectin (ตัว)</label><input type="number" id="h-iver" value="0" min="0" class="mu-input !p-1.5 !text-xs text-center"></div>
+                    <div><label class="block text-[10px] text-slate-500 mb-1">Albendazole (ตัว)</label><input type="number" id="h-alben" value="0" min="0" class="mu-input !p-1.5 !text-xs text-center"></div>
+                    <div><label class="block text-[10px] text-slate-500 mb-1">Chloramine (ตัว)</label><input type="number" id="h-chloro" value="0" min="0" class="mu-input !p-1.5 !text-xs text-center"></div>
+                    <div><label class="block text-[10px] text-slate-500 mb-1">DexamVet (ตัว)</label><input type="number" id="h-dexam" value="0" min="0" class="mu-input !p-1.5 !text-xs text-center"></div>
                 </div>
+                <div class="mt-2 text-xs"><label class="block text-[10px] text-slate-500 mb-1">อื่นๆ (ระบุชื่อยาและจำนวน)</label><input type="text" id="h-others" placeholder="เช่น ยาแดง 2 ขวด" class="mu-input !p-1.5 !text-xs"></div>
             </div>
 
             <div class="mu-card border-l-4 border-l-red-500 space-y-3">
@@ -1081,6 +1085,7 @@
         function chkNeg(cb) { if(cb.checked) cb.closest('.flex').querySelectorAll('.e-blood-cb').forEach(c => { if(c!==cb) c.checked=false; }); }
         function chkPos(cb) { if(cb.checked) { const n = cb.closest('.flex').querySelector('input[value="Negative"]'); if(n) n.checked=false; } }
 
+        // 🌟 อัปเดต: ให้บวกยอด Feces และตัวแปรอื่นๆ เข้าไปด้วย
         function showLogSummary() {
             const o = document.getElementById('g-owner-name').value;
             document.getElementById('logModalMeta').innerHTML = `📅 ${userProfile.campDate} | 🚐 ${userProfile.assignedLine}<br>🏠 ฟาร์ม: <b>${o}</b>`;
@@ -1088,7 +1093,8 @@
             let html = "";
             const v = id => parseInt(document.getElementById(id).value)||0;
             const anim = v('c-cow')+v('c-buff')+v('c-goat')+v('c-sheep');
-            const proc = v('h-fmd')+v('h-lsd')+v('h-edta')+v('h-clot')+v('h-iver')+v('h-alben')+v('h-chloro')+v('h-dexam')+v('h-vitb');
+            // เพิ่ม h-feces เข้าไปในการนับจำนวนหัตถการรวม
+            const proc = v('h-fmd')+v('h-lsd')+v('h-edta')+v('h-clot')+v('h-feces')+v('h-iver')+v('h-alben')+v('h-chloro')+v('h-dexam')+v('h-vitb');
             
             if(anim > 0 || proc > 0) {
                 html += `<div class="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-2"><h4 class="font-bold text-[#00246B] text-xs mb-1">📋 สรุปหัตถการ</h4><div class="text-[11px] text-slate-600">จำนวนสัตว์: ${anim} ตัว<br>ทำหัตถการ/ยา: ${proc} รายการ</div></div>`;
@@ -1105,38 +1111,58 @@
             openModal('logSummaryModal');
         }
 
+        // 🌟 อัปเดตระบบส่งข้อมูล ยัดตัวแปรครบถ้วนตรงเป๊ะตามเซิร์ฟเวอร์ต้องการ
         async function submitLogbook(btnObj) {
             btnObj.innerText = "กำลังส่ง..."; btnObj.disabled = true;
             const owner = document.getElementById('g-owner-name').value;
+            const phone = document.getElementById('g-owner-phone').value || "-";
+            const address = document.getElementById('g-owner-address').value || "-";
             const promises = [];
 
             const v = id => parseInt(document.getElementById(id).value)||0;
-            if((v('c-cow')+v('c-buff')+v('c-goat')+v('c-sheep')+v('h-fmd')+v('h-lsd')+v('h-edta')+v('h-clot')+v('h-iver')+v('h-alben')+v('h-chloro')+v('h-dexam')+v('h-vitb')) > 0) {
-                promises.push(fetch('/api/liff/procedure', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({
-                    lineId: myLineId, staffName: staffName, date: userProfile.campDate, line: userProfile.assignedLine, ownerName: owner, ownerPhone: document.getElementById('g-owner-phone').value||"-", ownerAddress: document.getElementById('g-owner-address').value||"-",
+            const othersText = document.getElementById('h-others').value || "";
+
+            // เช็คว่ามีการทำรายการหัตถการหรือกรอกยาบ้างไหม
+            if((v('c-cow')+v('c-buff')+v('c-goat')+v('c-sheep')+v('h-fmd')+v('h-lsd')+v('h-edta')+v('h-clot')+v('h-feces')+v('h-iver')+v('h-alben')+v('h-chloro')+v('h-dexam')+v('h-vitb')) > 0 || othersText !== "") {
+                const payloadProc = {
+                    lineId: userProfile.lineId, 
+                    staffName: userProfile.nickname, 
+                    date: userProfile.campDate, 
+                    line: userProfile.assignedLine, 
+                    ownerName: owner, 
+                    ownerPhone: phone, 
+                    ownerAddress: address,
                     cows: v('c-cow'), buffs: v('c-buff'), goats: v('c-goat'), sheeps: v('c-sheep'),
-                    fmd: v('h-fmd'), lsd: v('h-lsd'), edta: v('h-edta'), clot: v('h-clot'), iver: v('h-iver'), alben: v('h-alben'), chloro: v('h-chloro'), dexam: v('h-dexam'), vitb: v('h-vitb')
-                })}));
+                    edta: v('h-edta'), clot: v('h-clot'), feces: v('h-feces'), fmd: v('h-fmd'), lsd: v('h-lsd'),
+                    iver: v('h-iver'), alben: v('h-alben'), chloro: v('h-chloro'), dexam: v('h-dexam'), vitb: v('h-vitb'), others: othersText
+                };
+                promises.push(fetch('/api/liff/procedure', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payloadProc) }));
             }
 
-            const animals = [];
-            document.querySelectorAll('#lab-entries-container > div').forEach(card => {
-                const no = card.querySelector('.e-animal-no').value.trim(); if(!no) return;
-                let bp = []; card.querySelectorAll('.e-blood-cb:checked').forEach(cb => bp.push(cb.value));
-                const gf = cls => { let r=[]; const inps=card.querySelectorAll(`.${cls}`); const names=['Strongyle','Trichuris','Coccidia','Capillaria',card.querySelector(`.${cls}-other`).value]; inps.forEach((inp,i)=>{ if(inp.value) r.push({name:names[i]||'อื่น', epg:parseInt(inp.value)});}); return r; };
-                animals.push({ animalNo: no, species: card.querySelector('.e-species').value, labs: { pcv: card.querySelector('.e-pcv').value, bloodParasites: bp, roseBengal: card.querySelector('.e-rb').value, flotation: gf('i-flot'), sedimentation: gf('i-sed') }});
+            let labAnimalsList = [];
+            document.querySelectorAll('.lab-card').forEach(card => {
+                const no = card.querySelector('.e-animal-no').value; if(!no) return;
+                let bloodP = []; card.querySelectorAll('.e-blood-cb:checked').forEach(cb => bloodP.push(cb.value));
+                const getFec = (cls) => { let r = []; const inputs = card.querySelectorAll(`.${cls}`); const names = ['Strongyle','Trichuris','Coccidia','Capillaria', card.querySelector(`.${cls}-other`).value]; inputs.forEach((inp, i) => { if(inp.value) r.push({name: names[i]||'อื่น', epg: parseInt(inp.value)}); }); return r; };
+                
+                labAnimalsList.push({ animalNo: no, species: card.querySelector('.e-species').value, labs: { pcv: card.querySelector('.e-pcv').value, bloodParasites: bloodP, roseBengal: card.querySelector('.e-rb').value, flotation: getFec('i-flot'), sedimentation: getFec('i-sed') } });
             });
-            if(animals.length > 0) {
-                promises.push(fetch('/api/liff/lab', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ lineId: myLineId, staffName: staffName, date: userProfile.campDate, line: userProfile.assignedLine, ownerName: owner, animals: animals })}));
+
+            if(labAnimalsList.length > 0) {
+                promises.push(fetch('/api/liff/lab', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ lineId: userProfile.lineId, staffName: userProfile.nickname, date: userProfile.campDate, line: userProfile.assignedLine, ownerName: owner, animals: labAnimalsList }) }));
             }
 
             try {
-                if(promises.length === 0) throw new Error("ไม่มีข้อมูลให้ส่ง");
-                const resps = await Promise.all(promises);
-                if(resps.some(r => !r.ok)) throw new Error("Backend Error");
-                alert("✅ ส่งข้อมูลฟาร์มเรียบร้อย!");
-                if(liff.isInClient()) liff.closeWindow(); else { closeModal('logSummaryModal'); btnObj.innerText="✅ ส่งข้อมูล"; btnObj.disabled=false; document.getElementById('view-logbook').querySelectorAll('input[type="number"], input[type="text"]').forEach(i=>i.value=''); document.getElementById('lab-entries-container').innerHTML=''; addLabEntry(); switchNav('dashboard', document.querySelector('.nav-item.active')); }
-            } catch(e) { alert("❌ การส่งล้มเหลว: " + e.message); btnObj.innerText="✅ ส่งข้อมูล"; btnObj.disabled=false; }
+                await Promise.all(promises);
+                if (liff.isInClient()) liff.closeWindow();
+                else { alert("✅ บันทึก Logbook สำเร็จ!"); closeModal('logSummaryModal'); btnObj.innerText = "✅ ยืนยันข้อมูล"; btnObj.disabled = false; switchNav('dashboard', document.querySelector('.nav-item.active')); }
+            } catch (error) {
+                console.error("Error submitting data:", error);
+                let errorTxt = "เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้งครับ";
+                if (error.message) { errorTxt = error.message.replace(/^Error:\s*/, ''); }
+                alert(`❌ การส่งข้อมูลล้มเหลว:\n\n${errorTxt}`);
+                btnObj.innerText = '✅ บันทึกข้อมูล'; btnObj.disabled = false;
+            }
         }
 
         // Modal Helpers
