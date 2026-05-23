@@ -1375,6 +1375,9 @@ if (text.match(/^#\s*เลิกสาย/)) {
 });
 // 🔑 API รับเรื่องลงทะเบียนสายตรงจากหน้า LIFF (พร้อมส่ง Flex สรุปสมาชิก)
 // ==========================================
+// ==========================================
+// 📝 อัปเดต API ระบบลงทะเบียน (แก้บัค Flex Message ไม่เด้ง)
+// ==========================================
 app.post('/api/register-user', express.json(), async (req, res) => {
     try {
         const { lineId, studentId, dateStr } = req.body;
@@ -1403,10 +1406,11 @@ app.post('/api/register-user', express.json(), async (req, res) => {
             if (row.get('Assigned_Line') === myLineName && row.get('Camp_Date') === myCampDate) {
                 const isRegistered = !!row.get('LINE_UID');
                 const isLeader = (row.get('Role') === 'ผู้นำสาย' || row.get('Role') === 'หัวหน้า');
-                // แก้ไขการแสดงผลเป็น ปี X ตามข้อ 6
                 const nameStr = `หมอ${row.get('Nickname')} ปี ${row.get('Year')}`;
-                const statusIcon = isRegistered ? "✅" : "❌";
-                const textColor = isRegistered ? "#16a34a" : "#ef4444";
+                
+                // ปรับไอคอนให้ดูซอฟต์ลง สำหรับคนที่ยังไม่ลงทะเบียน
+                const statusIcon = isRegistered ? "✅" : "⏳"; 
+                const textColor = isRegistered ? "#16a34a" : "#94a3b8";
 
                 const itemObj = { type: "text", text: `${statusIcon} ${isLeader ? '👑' : '👤'} ${nameStr}`, size: "sm", color: textColor, weight: isRegistered ? "regular" : "bold", wrap: true, margin: "sm" };
                 if (isLeader) leaderContents.push(itemObj); else memberContents.push(itemObj);
@@ -1423,7 +1427,7 @@ app.post('/api/register-user', express.json(), async (req, res) => {
             }
         };
 
-        // 🎯 ดึงภารกิจประจำวันมาสร้าง Flex Message 2 คอนเทนต์ภารกิจ (รองรับหลายสถานที่สูงสุด 4 ที่)
+        // 🎯 ดึงภารกิจประจำวันมาสร้าง Flex Message 2
         const mSheet = doc.sheetsByTitle['Missions_Data'];
         const mRows = mSheet ? await mSheet.getRows() : [];
         const mData = mRows.find(r => r.get('Camp_Date') === myCampDate && r.get('Assigned_Line') === myLineName);
@@ -1433,8 +1437,9 @@ app.post('/api/register-user', express.json(), async (req, res) => {
             for (let i = 1; i <= 4; i++) {
                 const loc = mData.get(`Location_${i}`);
                 if (loc && loc.trim() !== "") {
+                    // 🚨 จุดที่แก้บัค: เปลี่ยนเป็นคำสั่งที่ LINE รู้จัก (paddingAll และ cornerRadius)
                     missionBoxes.push({
-                        type: "box", layout: "vertical", margin: "md", padding: "8px", backgroundColor: "#f8fafc", borderRadius: "8px",
+                        type: "box", layout: "vertical", margin: "md", paddingAll: "8px", backgroundColor: "#f8fafc", cornerRadius: "8px",
                         contents: [
                             { type: "text", text: `📍 จุดที่ ${i}: ${loc}`, weight: "bold", size: "sm", color: "#00246B" },
                             { type: "text", text: `🐾 สัตว์: ${mData.get(`Animal_Count_${i}`) || '-'} ตัว | 📝 งาน: ${mData.get(`Task_Details_${i}`) || '-'}`, size: "xs", color: "#475569", margin: "xs", wrap: true }
@@ -1452,8 +1457,8 @@ app.post('/api/register-user', express.json(), async (req, res) => {
             type: "flex", altText: `📋 แผนภารกิจประจำวัน ${myLineName}`,
             contents: {
                 type: "bubble",
-                header: { type: "box", layout: "vertical", backgroundColor: "#F8B500", contents: [{ type: "text", text: "📋 DAILY MISSION PLAN", color: "#00246B", weight: "bold", size: "xs" }, { type: "text", text: `แผนงานประจำวันที่ ${myCampDate}`, color: "#00246B", weight: "bold", size: "md", margin: "xs" }] },
-                body: { type: "box", layout: "vertical", contents: [{ type: "text", text: "รายการสถานที่ปฏิบัติภารกิจ:", weight: "bold", size: "sm", color: "#00246B" }, ...missionBoxes] },
+                header: { type: "box", layout: "vertical", backgroundColor: "#F8B500", contents: [{ type: "text", text: "📋 DAILY MISSION", color: "#00246B", weight: "bold", size: "xs" }, { type: "text", text: `แผนงาน ${myCampDate}`, color: "#00246B", weight: "bold", size: "md", margin: "xs" }] },
+                body: { type: "box", layout: "vertical", contents: [{ type: "text", text: "สถานที่ปฏิบัติภารกิจ:", weight: "bold", size: "sm", color: "#00246B" }, ...missionBoxes] },
                 footer: { type: "box", layout: "vertical", contents: [{ type: "button", style: "primary", color: "#00246B", action: { type: "uri", label: "🎯 เข้าสู่หน้าหลักระบบค่าย", uri: "https://liff.line.me/2010125977-E8l1g7Zp" } }] }
             }
         };
@@ -1461,7 +1466,10 @@ app.post('/api/register-user', express.json(), async (req, res) => {
         // ยิงต่อเนื่อง 2 ข้อความเข้าแชท LINE OA
         try {
             await client.pushMessage({ to: lineId, messages: [flexTeam, flexMission] });
-        } catch (err) { console.error("🚨 Push Registration Flex Fail:", err); }
+            console.log("✅ ยิง Flex ลงทะเบียนสำเร็จ");
+        } catch (err) { 
+            console.error("🚨 Push Registration Flex Fail:", err); 
+        }
 
         res.json({
             success: true,
