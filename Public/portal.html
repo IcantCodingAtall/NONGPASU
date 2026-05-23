@@ -49,14 +49,15 @@
 <body>
 
     <div class="bg-[#00246B] text-white p-5 sticky top-0 z-50 rounded-b-3xl shadow-lg border-b-4 border-[#F8B500]">
-        <div class="flex justify-between items-center max-w-md mx-auto">
-            <div>
-                <h1 class="text-xl font-bold tracking-wide">MU VET <span class="text-[#F8B500]">PORTAL</span></h1>
-                <div id="staff-name-display" class="text-xs text-blue-200 mt-1 flex items-center gap-1"><i class="fa-solid fa-circle-notch fa-spin"></i> กำลังเชื่อมต่อ...</div>
+        <div class="flex items-center justify-between p-4 bg-white border-b border-slate-100 shadow-sm rounded-b-2xl">
+    <div class="flex items-center gap-2">
+        <div id="staff-name-display" class="text-xs font-bold text-slate-700">
             </div>
-            <img src="https://upload.wikimedia.org/wikipedia/th/thumb/f/f3/Mahidol_U.png/200px-Mahidol_U.png" class="h-10 w-10 object-contain bg-white rounded-full p-1">
-        </div>
     </div>
+    <div class="w-9 h-9 bg-gradient-to-tr from-[#00246B] to-blue-600 rounded-xl flex items-center justify-center shadow-md shadow-blue-100">
+        <span class="text-lg">🩺</span>
+    </div>
+</div>
 
     <div class="max-w-md mx-auto w-full p-4">
 
@@ -332,8 +333,9 @@
                 
                 if (data.success) {
                     userProfile = data.profile;
-                    staffName = `${userProfile.nickname} ${userProfile.year}`;
-                    document.getElementById('staff-name-display').innerHTML = `👤 หมอ${staffName} <span class="bg-[#F8B500] text-[#00246B] px-1.5 py-0.5 rounded text-[9px] ml-1 font-bold shadow-sm">${userProfile.assignedLine}</span>`;
+                    // ซ่อมจุดแสดงผลชื่อบัญชีให้ขึ้นคำว่า ปี ชัดเจนตามข้อ 6
+staffName = `หมอ${userProfile.nickname} ปี ${userProfile.year}`;
+document.getElementById('staff-name-display').innerHTML = `👤 ${staffName} <span class="bg-[#F8B500] text-[#00246B] px-1.5 py-0.5 rounded text-[9px] ml-1 font-bold shadow-sm">${userProfile.assignedLine}</span>`;
                     
                     // ล็อก Dropdown
                     const lockSelectors = ['invDate', 'invLine', 'logDate', 'logLine'];
@@ -550,68 +552,90 @@
         }
 
         async function selectTeamMission(index) {
-            const targetData = currentFetchedMissions[index];
-            if(!targetData) return;
+    const targetData = currentFetchedMissions[index];
+    if(!targetData) return;
 
-            document.getElementById('active-teams-main').classList.add('hidden');
-            document.getElementById('selected-mission-wrapper').classList.remove('hidden');
+    document.getElementById('active-teams-main').classList.add('hidden');
+    document.getElementById('selected-mission-wrapper').classList.remove('hidden');
 
-            const isMyTeam = (targetData.line === userProfile.assignedLine);
-            const badge = document.getElementById('target-line-badge');
-            if(isMyTeam) badge.classList.remove('hidden'); else badge.classList.add('hidden');
+    const isMyTeam = (targetData.line === userProfile.assignedLine);
+    const badge = document.getElementById('target-line-badge');
+    if(isMyTeam) badge.classList.remove('hidden'); else badge.classList.add('hidden');
 
-            document.getElementById('target-line-title').innerText = `${targetData.line}`;
-            document.getElementById('target-line-location').innerHTML = `<i class="fa-solid fa-map-location-dot w-4 text-[#F8B500]"></i> สถานที่: ${targetData.location}`;
-            document.getElementById('target-line-count').innerHTML = `<i class="fa-solid fa-cow w-4 text-[#F8B500]"></i> ปริมาณสัตว์: ${targetData.count} ตัว`;
-            document.getElementById('target-line-detail').innerHTML = `<i class="fa-solid fa-clipboard-list w-4 text-[#F8B500]"></i> งาน: ${targetData.detail}`;
-            
-            // โหลดรูปภาพ
-            document.getElementById('target-line-img').src = targetData.image || "https://images.unsplash.com/photo-1595083162795-0e698888b15d?w=500&q=80&auto=format&fit=crop";
+    document.getElementById('target-line-title').innerText = `${targetData.line}`;
+    
+    // 🌟 แก้ไขฟีเจอร์ข้อ 1 & 2: สร้างการ์ดแสดงผลสถานที่ออกค่ายแบบรายจุด (สูงสุด 4 ที่)
+    let placesHtml = '';
+    if (targetData.locations && targetData.locations.length > 0) {
+        targetData.locations.forEach((loc, idx) => {
+            // สร้างปุ่มลิงก์แผนที่กูเกิ้ลแมพแบบไดนามิก
+            const mapButton = loc.mapUrl 
+                ? `<a href="${loc.mapUrl}" target="_blank" class="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded-md font-bold inline-flex items-center gap-1"><i class="fa-solid fa-location-arrow"></i> เปิดแผนที่ Maps</a>`
+                : `<span class="text-[9px] text-slate-400 italic">ไม่มีพิกัดแนบ</span>`;
 
-            // โหลดรายชื่อสมาชิก
-            let memHtml = '';
-            if (targetData.leader) {
-                memHtml += `<div class="flex justify-between items-center bg-amber-50 p-2 rounded-lg border border-amber-100 mb-1"><span class="font-bold text-amber-700">👑 ${targetData.leader.name} (ปี ${targetData.leader.year})</span><span class="text-[9px] bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded font-bold">ผู้นำสาย</span></div>`;
-            }
-            if (targetData.members && targetData.members.length > 0) {
-                targetData.members.forEach(m => {
-                    memHtml += `<div class="flex justify-between items-center p-2 border-b border-slate-50 border-dashed last:border-0"><span class="text-slate-600 font-medium">👤 ${m.name} (ปี ${m.year})</span><span class="text-[9px] text-slate-400">ผู้ปฏิบัติงาน</span></div>`;
-                });
-            } else {
-                memHtml += `<p class="text-center text-slate-400 italic text-[10px] py-2">-- รออัปเดตข้อมูลสมาชิก --</p>`;
-            }
-            document.getElementById('target-line-members').innerHTML = memHtml;
-            
-            // โหลดเช็คลิสต์
-            const zone = document.getElementById('checklist-render-zone');
-            zone.innerHTML = '<p class="text-center text-xs text-slate-400 py-6"><i class="fa-solid fa-spinner fa-spin mr-1"></i> โหลดข้อมูลเช็คลิสต์...</p>';
+            // สร้างปุ่มกดโทรศัพท์เบอร์ติดต่อเจ้าของฟาร์ม
+            const phoneButton = (loc.phone && loc.phone !== "-")
+                ? `<a href="tel:${loc.phone}" class="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded-md font-bold inline-flex items-center gap-1"><i class="fa-solid fa-phone"></i> โทร: ${loc.phone}</a>`
+                : `<span class="text-[9px] text-slate-400 italic">ไม่มีเบอร์โทร</span>`;
 
-            try {
-                const res = await fetch(`/api/checked-tasks?date=${userProfile.campDate}&line=${targetData.line}`);
-                const data = await res.json();
-                
-                let html = '';
-                for(let phase in MASTER_TEMPLATE) {
-                    let phaseTitle = phase === 'Before' ? '🚛 ก่อนออกสาย' : phase === 'During' ? '💉 ระหว่างปฏิบัติงาน' : '🏥 หลังกลับถึงค่าย';
-                    html += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2 mb-3">
-                                <h5 class="text-[11px] font-bold text-[#00246B] border-b border-slate-200 pb-1 mb-2">${phaseTitle}</h5>`;
-                    
-                    MASTER_TEMPLATE[phase].forEach(taskName => {
-                        const isChecked = data.checkedTasks.includes(taskName);
-                        // ล็อกการกดถ้าไม่ใช่คนในสายนี้
-                        const isDisabled = !isMyTeam ? 'disabled' : ''; 
-                        
-                        html += `
-                        <div class="flex items-start gap-2 bg-white p-2.5 rounded-lg text-xs shadow-sm border border-slate-100 transition-colors ${isChecked ? 'bg-green-50/30' : ''}">
-                            <input type="checkbox" ${isChecked ? 'checked':''} ${isDisabled} onchange="toggleTaskSync('${phase}', '${taskName}', this, '${targetData.line}')" class="w-4 h-4 mt-0.5 accent-green-600 rounded cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
-                            <span class="text-slate-600 leading-snug flex-1 ${isChecked ? 'line-through text-slate-400':''}">${taskName}</span>
-                        </div>`;
-                    });
-                    html += `</div>`;
-                }
-                zone.innerHTML = html;
-            } catch(e) { zone.innerHTML = '<p class="text-xs text-red-500 text-center py-4">โหลดข้อมูลเช็คลิสต์ไม่ได้</p>'; }
+            placesHtml += `
+            <div class="mb-3 p-3 bg-white/10 rounded-xl border border-white/10 backdrop-blur-sm">
+                <div class="flex justify-between items-start mb-1.5">
+                    <h5 class="text-xs font-bold text-[#F8B500]">📍 จุดปฏิบัติงานที่ ${idx+1}: ${loc.place}</h5>
+                </div>
+                <p class="text-[11px] text-blue-50/90 mb-1"><i class="fa-solid fa-cow text-[#F8B500] w-4"></i> ยอดสัตว์: ${loc.count} ตัว | 📝 งาน: ${loc.detail}</p>
+                <div class="flex items-center gap-2 mt-2 pt-1.5 border-t border-white/5">
+                    ${mapButton} ${phoneButton}
+                </div>
+            </div>`;
+        });
+    } else {
+        placesHtml = `<p class="text-xs text-blue-100 italic py-2">ยังไม่มีการลงทะเบียนแผนสถานที่ปฏิบัติงาน</p>`;
+    }
+    
+    // ยัดข้อมูลการ์ดสถานที่ลงส่วนหัว
+    document.getElementById('target-line-location').innerHTML = placesHtml;
+    
+    // ซ่อนข้อมูลเก่าๆ ที่เป็นข้อความสรุปเดี่ยวทิ้งไปเลย ปรับความกระชับ
+    document.getElementById('target-line-count').style.display = 'none';
+    document.getElementById('target-line-detail').style.display = 'none';
+    
+    document.getElementById('target-line-img').src = targetData.image || "https://images.unsplash.com/photo-1595083162795-0e698888b15d?w=500&q=80&auto=format&fit=crop";
+
+    // ส่วนประมวลรายชื่อผู้ปฏิบัติงานและการดึงเช็คลิสต์ประจำวันปล่อยโค้ดเดิมทำงานปกติ...
+    let memHtml = '';
+    if (targetData.leader) {
+        memHtml += `<div class="flex justify-between items-center bg-amber-50 p-2 rounded-lg border border-amber-100 mb-1"><span class="font-bold text-amber-700">👑 ${targetData.leader.name} (ปี ${targetData.leader.year})</span><span class="text-[9px] bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded font-bold">ผู้นำสาย</span></div>`;
+    }
+    if (targetData.members && targetData.members.length > 0) {
+        targetData.members.forEach(m => {
+            memHtml += `<div class="flex justify-between items-center p-2 border-b border-slate-50 border-dashed last:border-0"><span class="text-slate-600 font-medium">👤 ${m.name} (ปี ${m.year})</span><span class="text-[9px] text-slate-400">ผู้ปฏิบัติงาน</span></div>`;
+        });
+    } else {
+        memHtml += `<p class="text-center text-slate-400 italic text-[10px] py-2">-- ข้อมูลรายชื่อผู้ปฏิบัติงานในสาย --</p>`;
+    }
+    document.getElementById('target-line-members').innerHTML = memHtml;
+    
+    const zone = document.getElementById('checklist-render-zone');
+    zone.innerHTML = '<p class="text-center text-xs text-slate-400 py-6"><i class="fa-solid fa-spinner fa-spin mr-1"></i> โหลดเช็คลิสต์...</p>';
+
+    try {
+        const res = await fetch(`/api/checked-tasks?date=${userProfile.campDate}&line=${targetData.line}`);
+        const data = await res.json();
+        let html = '';
+        for(let phase in MASTER_TEMPLATE) {
+            let phaseTitle = phase === 'Before' ? '🚛 ก่อนออกสาย' : phase === 'During' ? '💉 ระหว่างปฏิบัติงาน' : '🏥 หลังกลับถึงค่าย';
+            html += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2 mb-3"><h5 class="text-[11px] font-bold text-[#00246B] border-b border-slate-200 pb-1 mb-2">${phaseTitle}</h5>`;
+            MASTER_TEMPLATE[phase].forEach(taskName => {
+                const isChecked = data.checkedTasks.includes(taskName);
+                const isDisabled = !isMyTeam ? 'disabled' : ''; 
+                html += `<div class="flex items-start gap-2 bg-white p-2.5 rounded-lg text-xs shadow-sm border border-slate-100 transition-colors ${isChecked ? 'bg-green-50/30' : ''}"><input type="checkbox" ${isChecked ? 'checked':''} ${isDisabled} onchange="toggleTaskSync('${phase}', '${taskName}', this, '${targetData.line}')" class="w-4 h-4 mt-0.5 accent-green-600 rounded cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"><span class="text-slate-600 leading-snug flex-1 ${isChecked ? 'line-through text-slate-400':''}">${taskName}</span></div>`;
+            });
+            html += `</div>`;
         }
+        zone.innerHTML = html;
+    } catch(e) { zone.innerHTML = '<p class="text-xs text-red-500 text-center py-4">โหลดข้อมูลเช็คลิสต์ขัดข้อง</p>'; }
+}
 
         async function toggleTaskSync(phase, task, element, lineName) {
             element.disabled = true;
@@ -650,44 +674,44 @@
         // Inventory (ระบบดึงคลัง และล็อกวันที่/สายอัตโนมัติ)
         // -----------------------------------------
         async function loadInventory() {
-            document.getElementById('invLoading').classList.remove('hidden');
-            document.getElementById('invEmpty').classList.add('hidden');
-            document.getElementById('invContainer').innerHTML = '';
+    // 🌟 แก้ไขข้อ 3: สั่งเคลียร์และซ่อนกล่องทั้งหมดทันทีที่กดปุ่ม เพื่อเปิดหน้ารอโหลดที่สะอาดตา ป้องกันของซ้อน
+    document.getElementById('invContainer').innerHTML = '';
+    document.getElementById('invLoading').classList.remove('hidden');
+    document.getElementById('invEmpty').classList.add('hidden');
+    
+    if (userProfile) {
+        document.getElementById('invDate').innerHTML = `<option value="${userProfile.campDate}">${userProfile.campDate}</option>`;
+        document.getElementById('invLine').innerHTML = `<option value="${userProfile.assignedLine}">${userProfile.assignedLine}</option>`;
+        document.getElementById('invDate').disabled = true;
+        document.getElementById('invLine').disabled = true;
+    }
+
+    try {
+        const url = isReturnMode 
+            ? `/api/team-taken-items?date=${userProfile.campDate}&line=${userProfile.assignedLine}` 
+            : '/api/inventory';
             
-            // 🌟 ซ่อมแล้ว: บังคับล็อกวันที่และสายตามโปรไฟล์เสมอ ทั้งเบิกและคืน!
-            if (userProfile) {
-                document.getElementById('invDate').innerHTML = `<option value="${userProfile.campDate}">${userProfile.campDate}</option>`;
-                document.getElementById('invLine').innerHTML = `<option value="${userProfile.assignedLine}">${userProfile.assignedLine}</option>`;
-                document.getElementById('invDate').disabled = true;
-                document.getElementById('invLine').disabled = true;
-            }
+        const res = await fetch(url, { headers: { 'ngrok-skip-browser-warning': 'true' }});
+        const data = await res.json();
+        
+        let rawItems = isReturnMode ? (data.items || []) : (Array.isArray(data) ? data : []);
 
-            try {
-                // ดึงข้อมูลตามโหมด (คืน = ดึงยอดค้างของสาย / เบิก = ดึงคลังรวม)
-                const url = isReturnMode 
-                    ? `/api/team-taken-items?date=${userProfile.campDate}&line=${userProfile.assignedLine}` 
-                    : '/api/inventory';
-                    
-                const res = await fetch(url, { headers: { 'ngrok-skip-browser-warning': 'true' }});
-                const data = await res.json();
-                
-                let rawItems = isReturnMode ? (data.items || []) : (Array.isArray(data) ? data : []);
-
-                document.getElementById('invLoading').classList.add('hidden');
-                
-                if(rawItems.length === 0) {
-                    document.getElementById('invEmpty').innerText = isReturnMode ? "🎉 สายเราไม่มีของค้างเบิกแล้ว เยี่ยมมาก!" : "กล่องอุปกรณ์ว่างเปล่า";
-                    document.getElementById('invEmpty').classList.remove('hidden');
-                } else {
-                    inventoryData = rawItems.map((item, idx) => ({ ...item, selectedQty: 0, _idx: idx }));
-                    renderInvItems(); // วาดรายการแยกหมวดหมู่
-                }
-                validateInv();
-            } catch(e) { 
-                console.error("Error Loading Inventory:", e); 
-                document.getElementById('invLoading').innerText = "❌ ดึงข้อมูลล้มเหลว"; 
-            }
+        // โหลดข้อมูลสำเร็จ ค่อยปิดแท็บกล่องรอโหลด
+        document.getElementById('invLoading').classList.add('hidden');
+        
+        if(rawItems.length === 0) {
+            document.getElementById('invEmpty').innerText = isReturnMode ? "🎉 สายเราไม่มีของค้างเบิกแล้ว เยี่ยมมาก!" : "กล่องอุปกรณ์ว่างเปล่า";
+            document.getElementById('invEmpty').classList.remove('hidden');
+        } else {
+            inventoryData = rawItems.map((item, idx) => ({ ...item, selectedQty: 0, _idx: idx }));
+            renderInvItems(); // เรนเดอร์แยกหมวดหมู่
         }
+        validateInv();
+    } catch(e) { 
+        console.error(e); 
+        document.getElementById('invLoading').innerText = "❌ รีเฟรชโหลดรายการอุปกรณ์ใหม่อีกครั้ง"; 
+    }
+}
 
         async function submitInventory(btnObj) {
             btnObj.innerText = "กำลังส่ง..."; btnObj.disabled = true;

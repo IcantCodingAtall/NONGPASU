@@ -107,6 +107,10 @@
                     // ลงทะเบียนผ่าน ซ่อนฟอร์ม โชว์หน้าสำเร็จ
                     document.getElementById('form-section').classList.add('hidden');
                     document.getElementById('success-section').classList.remove('hidden');
+                 // 🌟 ฟีเจอร์ข้อ 4: สั่งปิดหน้าต่าง LIFF ตัวเองเด้งหลุดออกมาหน้าห้องแชท เพื่อให้น้องๆ เห็น Flex ข้อความแผนงานทันที
+                if (liff.isInClient()) {
+        liff.closeWindow();
+                }
                 } else { 
                     alert(data.message); 
                     btn.innerHTML = '🚀 ยืนยันการลงทะเบียน';

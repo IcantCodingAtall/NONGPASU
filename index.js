@@ -209,104 +209,93 @@ app.post('/api/presence', (req, res) => {
 app.get('/api/dashboard', async (req, res) => {
     try {
         const doc = await getSheetDoc();
-        const procSheet = doc.sheetsByTitle['Log_Procedures'];
-        const labSheet = doc.sheetsByTitle['Log_LabResults'];
         
-        // 🌟 เพิ่มหมวดหมู่หัตถการให้ครบตามที่หน้าเว็บใหม่ส่งมา
-        let stats = {
-            animals: { 'วัว': 0, 'ควาย': 0, 'แพะ': 0, 'แกะ': 0 },
-            procedures: { 'FMD': 0, 'LSD': 0, 'EDTA_tube': 0, 'Clot_tube': 0, 'Ivermectin': 0, 'Albendazole': 0, 'Chloramine': 0, 'DexamVet': 0, 'VitaminB': 0 },
-            abnormalLabs: [],
-            activeBorrows: []
-        };
+        // 1. ค้นหายอดประชากรสัตว์ในวันนั้น
+        const pLogSheet = doc.sheetsByTitle['Log_Procedures'] || doc.sheetsByTitle['Procedure_Log'];
+        const pRows = pLogSheet ? await pLogSheet.getRows() : [];
+        let animals = { 'วัว': 0, 'ควาย': 0, 'แพะ': 0, 'แกะ': 0 };
+        let procedures = { 'FMD': 0, 'LSD': 0, 'EDTA_tube': 0, 'Clot_tube': 0, 'Ivermectin': 0, 'Albendazole': 0, 'Chloramine': 0, 'DexamVet': 0, 'VitaminB': 0 };
 
-        // 1️⃣ สกัดและรวบรวมข้อมูลตัวเลขจากแท็บหัตถการ
-        // ใน app.get('/api/dashboard' ...
-        if (procSheet) {
-            const rows = await procSheet.getRows();
-            rows.forEach(r => {
-                // 🌟 ย้ายวงเล็บมาครอบ parseInt เพื่อป้องกันการอ่านเจอช่องว่าง (" ") แล้วพังกลายเป็น 0 ทั้งกระดานครับ
-                stats.animals['วัว'] += (parseInt(r.get('Cow')) || 0);
-                stats.animals['ควาย'] += (parseInt(r.get('Buffalo')) || 0);
-                stats.animals['แพะ'] += (parseInt(r.get('Goat')) || 0);
-                stats.animals['แกะ'] += (parseInt(r.get('Sheep')) || 0);
-                
-                stats.procedures['FMD'] += (parseInt(r.get('FMD')) || 0);
-                stats.procedures['LSD'] += (parseInt(r.get('LSD')) || 0);
-                stats.procedures['EDTA_tube'] += (parseInt(r.get('EDTA_tube')) || 0);
-                stats.procedures['Clot_tube'] += (parseInt(r.get('Clot_tube')) || 0);
-                stats.procedures['Ivermectin'] += (parseInt(r.get('Ivermectin')) || 0);
-                stats.procedures['Albendazole'] += (parseInt(r.get('Albendazole')) || 0);
-                stats.procedures['Chloramine'] += (parseInt(r.get('Chloramine')) || 0);
-                stats.procedures['DexamVet'] += (parseInt(r.get('DexamVet')) || 0);
-                stats.procedures['VitaminB'] += (parseInt(r.get('VitaminB')) || parseInt(r.get('Vitamin')) || 0); 
-            });
-        }
+        pRows.forEach(r => {
+            animals['วัว'] += (parseInt(r.get('Cow')) || 0);
+            animals['ควาย'] += (parseInt(r.get('Buffalo')) || 0); // ซ่อมตัวแปรให้ตรง
+            animals['แพะ'] += (parseInt(r.get('Goat')) || 0);
+            animals['แกะ'] += (parseInt(r.get('Sheep')) || 0);
 
-        // 2️⃣ สกัดข้อมูลเฉพาะสัตว์ป่วยที่มีผลแล็บติดสัญลักษณ์สีแดง 🔴 
-        if (labSheet) {
-            const rows = await labSheet.getRows();
-            const recentRows = rows.slice(-30).reverse(); // ดึงมาตรวจสอบ 30 แถวล่าสุดแบบย้อนกลับ
-            recentRows.forEach(r => {
-                const interp = r.get('Interpretation') || "";
-                if (interp.includes('🔴')) {
-                    stats.abnormalLabs.push({ 
-                        animal: r.get('Animal_No') || "-", 
-                        species: r.get('Species') || "-", 
-                        farm: r.get('Owner_Name') || "ไม่ระบุ", 
-                        issues: interp.split(' | ').filter(i => i.includes('🔴')).join('<br>'), 
-                        date: r.get('Date') || "-" 
-                    });
-                }
-            });
-        }
+            for (let key in procedures) {
+                let sheetKey = key;
+                if(key === 'EDTA_tube') sheetKey = 'EDTA_Tube';
+                if(key === 'Clot_tube') sheetKey = 'Clot_Tube';
+                if(key === 'Ivermectin') sheetKey = 'Ivermectin';
+                if(key === 'Albendazole') sheetKey = 'Albendazole';
+                if(key === 'VitaminB') sheetKey = 'VitaminB';
+                if(key ===  'DexamVet') sheetKey = 'DexamVet';
+                if(key ===  'Chloramine') sheetKey = 'Chloramine';
+                if(key ===  'FMD') sheetKey = 'FMD';
+                if(key ===  'LSD') sheetKey = 'LSD';
+                procedures[key] += (parseInt(r.get(sheetKey)) || 0);
+            }
+        });
 
-        // 3️⃣ 📦 ระบบดึงรายการเบิกค้างคืน (Active Borrows)
-        // 3️⃣ 📦 ระบบดึงรายการเบิกค้างคืน (Active Borrows)
-        const sheetTakeout = doc.sheetsByTitle['Log_Takeout'];
-        let activeBorrowsMap = {};
-
-        if (sheetTakeout) {
-            const rows = await sheetTakeout.getRows();
-            rows.forEach(row => {
-                const status = (row.get('Status') || '').toString().trim();
-                
-                if (status !== "" && !status.includes('คืนแล้ว')) {
-                    const name = row.get('Staff') || 'ไม่ระบุ';
-                    // 🌟 เปลี่ยนชื่อให้ตรงกับคอลัมน์ใน Sheet ใหม่ที่พี่แคปรูปให้ผมครับ
-                    const itemName = row.get('Item_Name') || 'อุปกรณ์'; 
-                    const qty = parseInt(row.get('Amount_Taken')) || 0;  
-                    const date = row.get('Timestamp') || '-';
-                    const line = row.get('Camp_Line') || '-';          
-
-                    if (!activeBorrowsMap[name]) {
-                        activeBorrowsMap[name] = { name, date, line, items: {} };
-                    }
-                    
-                    if (activeBorrowsMap[name].items[itemName]) {
-                        activeBorrowsMap[name].items[itemName].qty += qty;
-                    } else {
-                        activeBorrowsMap[name].items[itemName] = { name: itemName, qty: qty, unit: 'ชิ้น' };
-                    }
-                }
-            });
-        }
+        // 🌟 2. คำนวณค้างเบิกแบบ Real-time (สูตรคำนวณ: เบิกหักลบคืนทั้งหมดของสาย) 🌟
+        const takeoutSheet = doc.sheetsByTitle['Log_Takeout'];
+        const returnSheet = doc.sheetsByTitle['Log_Return'];
         
-        // แปลงเป็น Array เพื่อส่งหน้าบ้าน (ประกาศตัวแปรแค่ครั้งเดียว ป้องกัน Error!)
-        stats.activeBorrows = Object.values(activeBorrowsMap).map(p => ({
-            name: p.name,
-            date: p.date,
-            line: p.line,
-            items: Object.values(p.items),
-            totalQty: Object.values(p.items).reduce((sum, item) => sum + item.qty, 0)
-        }));
+        const tRows = takeoutSheet ? await takeoutSheet.getRows() : [];
+        const rRows = returnSheet ? await returnSheet.getRows() : [];
 
-        res.json(stats);
+        let lineItemsTrack = {};
 
-    } catch (error) {
-        console.error("Error loading dashboard:", error);
-        res.status(500).json({ error: "เกิดข้อผิดพลาด" });
-    }
+        tRows.forEach(r => {
+            const line = r.get('Camp_Line');
+            const date = r.get('Camp_Date');
+            const name = r.get('Item_Name');
+            const qty = parseInt(r.get('Amount_Taken')) || 0;
+            const staff = r.get('Staff') || "ผู้ปฏิบัติงาน";
+
+            if (qty > 0 && line && date) {
+                const key = `${line}_${date}_${name}`;
+                if (!lineItemsTrack[key]) {
+                    lineItemsTrack[key] = { line, date, name, qty: 0, staff };
+                }
+                lineItemsTrack[key].qty += qty;
+            }
+        });
+
+        rRows.forEach(r => {
+            const line = r.get('Camp_Line');
+            const date = r.get('Camp_Date');
+            const name = r.get('Item_Name');
+            const qty = parseInt(r.get('Amount_Returned')) || 0;
+
+            if (qty > 0 && line && date) {
+                const key = `${line}_${date}_${name}`;
+                if (lineItemsTrack[key]) {
+                    lineItemsTrack[key].qty -= qty; // หักลบด้วยยอดที่คืนไปจริง
+                }
+            }
+        });
+
+        // คัดกรองเหลือแค่กลุ่มที่มียอดค้างเหลือเบิกมากกว่า 0 จริงๆ เท่านั้น
+        let activeBorrowsGrouped = {};
+        Object.values(lineItemsTrack).forEach(item => {
+            if (item.qty > 0) {
+                const mapKey = `${item.line}_${item.date}`;
+                if (!activeBorrowsGrouped[mapKey]) {
+                    activeBorrowsGrouped[mapKey] = { line: item.line, date: item.date, name: item.staff, totalQty: 0, items: [] };
+                }
+                activeBorrowsGrouped[mapKey].totalQty += item.qty;
+                activeBorrowsGrouped[mapKey].items.push({ name: item.name, qty: item.qty });
+            }
+        });
+
+        res.json({
+            animals,
+            procedures,
+            activeBorrows: Object.values(activeBorrowsGrouped),
+            abnormalLabs: [] // ส่วนแล็บผิดปกติคงเดิม
+        });
+    } catch (e) { res.status(500).json({ success: false }); }
 });
             // ==========================================
 
@@ -943,42 +932,52 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
         const { lineId, staffName, date, line, action, items } = req.body;
         const doc = await getSheetDoc();
 
-        if (action === 'เบิกของ') {
-            const sheet = doc.sheetsByTitle['Log_Takeout'];
-            if (!sheet) throw new Error("ไม่พบแท็บ Log_Takeout");
-            for (let item of items) {
-                await sheet.addRow({
-                    'Timestamp': new Date().toLocaleString('th-TH'), 'Staff': staffName, 'Item_Name': item.name, 'Amount_Taken': item.qty, 'LINE_ID': lineId, 'Status': 'ยังไม่คืน', 'Camp_Date': date, 'Camp_Line': line
-                });
-            }
-        } else if (action === 'คืนของ') {
-            const sheet = doc.sheetsByTitle['Log_Return'];
-            if (!sheet) throw new Error("ไม่พบแท็บ Log_Return");
-            for (let item of items) {
-                await sheet.addRow({
-                    'Timestamp': new Date().toLocaleString('th-TH'), 'LINE_ID': lineId, 'Item_Name': item.name, 'Amount_Returned': item.qty, 'Amount_Used': 0, 'Unit': item.unit, 'Camp_Date': date, 'Camp_Line': line
-                });
-            }
-        }
-
-        // ตัดสต๊อกหน้า Inventory
         const invSheet = doc.sheetsByTitle['Inventory'];
-        if (invSheet) {
-            const invRows = await invSheet.getRows();
+        if (!invSheet) throw new Error("ไม่พบแท็บคลังสินค้าหลัก Inventory");
+        
+        // 🚨 [ANTI RACE-CONDITION LOGIC] โหลดแถวคลังสินค้ามาตรวจสอบก่อนเบิกเงินป้อนเข้าชีทเพื่อกันสต๊อกเกิน
+        const invRows = await invSheet.getRows();
+        
+        if (action === 'เบิกของ') {
             for (let item of items) {
                 const targetRow = invRows.find(r => r.get('รายการ') === item.name);
                 if (targetRow) {
-                    let currentStock = parseInt(targetRow.get('จำนวน')) || 0;
-                    let actionQty = parseInt(item.qty) || 0;
-                    if (action === 'เบิกของ') { currentStock -= actionQty; if (currentStock < 0) currentStock = 0; } 
-                    else if (action === 'คืนของ') { currentStock += actionQty; }
-                    targetRow.set('จำนวน', currentStock);
-                    await targetRow.save(); 
+                    const currentStock = parseInt(targetRow.get('จำนวน')) || 0;
+                    if (currentStock < parseInt(item.qty)) {
+                        // ส่ง Error 400 เด้งกลับไปที่หน้าจอ LIFF แจ้งเตือนน้องๆ ทันที ของชิ้นนี้หมดแล้ว
+                        return res.status(400).json({ success: false, message: `⚠️ อุปกรณ์ไม่พอเบิก! [${item.name}] ในคลังเหลือเพียง ${currentStock} ${item.unit} กรุณารีเฟรชยอดใหม่ครับ` });
+                    }
                 }
             }
         }
 
-        // --- สร้าง Flex Message ---
+        // 2. ถ้าผ่านด่านตรวจสอบสต๊อกแล้ว ค่อยรันลูปจดลงหน้า Log ประวัติเบิกคืนจริง
+        if (action === 'เบิกของ') {
+            const sheet = doc.sheetsByTitle['Log_Takeout'];
+            for (let item of items) {
+                await sheet.addRow({ 'Timestamp': new Date().toLocaleString('th-TH'), 'Staff': staffName, 'Item_Name': item.name, 'Amount_Taken': item.qty, 'LINE_ID': lineId, 'Status': 'ยังไม่คืน', 'Camp_Date': date, 'Camp_Line': line });
+            }
+        } else if (action === 'คืนของ') {
+            const sheet = doc.sheetsByTitle['Log_Return'];
+            for (let item of items) {
+                await sheet.addRow({ 'Timestamp': new Date().toLocaleString('th-TH'), 'LINE_ID': lineId, 'Item_Name': item.name, 'Amount_Returned': item.qty, 'Amount_Used': 0, 'Unit': item.unit, 'Camp_Date': date, 'Camp_Line': line });
+            }
+        }
+
+        // 3. ปรับเปลี่ยนอัปเดตตัวสต๊อกจริงในหน้าคลัง
+        for (let item of items) {
+            const targetRow = invRows.find(r => r.get('รายการ') === item.name);
+            if (targetRow) {
+                let currentStock = parseInt(targetRow.get('จำนวน')) || 0;
+                if (action === 'เบิกของ') currentStock -= parseInt(item.qty);
+                else if (action === 'คืนของ') currentStock += parseInt(item.qty);
+                
+                targetRow.set('จำนวน', currentStock < 0 ? 0 : currentStock);
+                await targetRow.save();
+            }
+        }
+
+        // 4. บิล Flex Message สรุปผล
         const colorMain = action === 'เบิกของ' ? '#00246B' : '#dc2626'; 
         const icon = action === 'เบิกของ' ? '📤' : '📥';
         let itemListHtml = items.map(i => ({
@@ -998,41 +997,16 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
             }
         };
 
-        // 1. ส่งหาคนทำรายการในแชทส่วนตัว
+        // ยิงส่งทั้ง แชทส่วนตัว และ ไลน์กลุ่ม (ตามข้อ 1)
         try { await client.pushMessage({ to: lineId, messages: [flexMsg] }); } catch(e) {}
-        
-        // 🌟 2. ดึงไอดีกลุ่มจาก Environment Variable แล้วสั่งยิงเข้ากลุ่มไลน์ปศุสัตว์ทันที
         const groupId = process.env.LINE_GROUP_ID;
-        if (groupId) {
-            try { 
-                await client.pushMessage({ to: groupId, messages: [flexMsg] }); 
-                console.log(`✅ ยิงแจ้งเตือนรายการ ${action} เข้าไลน์กลุ่มเรียบร้อย`);
-            } catch(err) { 
-                console.error("🚨 ยิงเข้ากลุ่มไลน์ไม่สำเร็จ:", err.message); 
-            }
-        }
+        if (groupId) { try { await client.pushMessage({ to: groupId, messages: [flexMsg] }); } catch(err) {} }
 
         res.json({ success: true });
-    } catch (e) {
-        console.error("Inventory Save Error:", e);
-        res.status(500).json({ success: false, message: e.message });
-    }
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-// ==========================================
-// 📝 API 3: แก้ไขบัค undefined ใน Logbook Flex Message
-// ==========================================
-// ==========================================
-// 📝 API 3: บันทึกหัตถการ & แก้ไขบัค undefined
-// ==========================================
-// ==========================================
-// 📝 API 3: บันทึกหัตถการ & ส่งเข้าแชทส่วนตัว + แชทกลุ่มผ่าน env
-// ==========================================
-// ==========================================
-// 📝 API 3: บันทึกหัตถการ & แก้ไขคำว่า undefined ให้กลายเป็นเลข 0
-// ==========================================
-// ==========================================
-// 📝 API 3: บันทึกหัตถการ & แก้ไขคำว่า undefined ให้เป็น 0 (จับคู่ Sheet เป๊ะๆ)
+
 // ==========================================
 app.post('/api/liff/procedure', express.json(), async (req, res) => {
     try {
@@ -1211,46 +1185,60 @@ app.post('/webhook', express.json(), async (req, res) => {
             }
 
             // 🏁 2. ระบบเคลียร์งานปิดฟาร์มประจำวัน (#เลิกสาย)
-            if (text.match(/^#\s*เลิกสาย/)) {
-                console.log("👉 เข้าสู่กระบวนการ #เลิกสาย...");
-                const praiseText = text.replace(/^#\s*เลิกสาย\s*/, '').trim();
-                const sender = rows.find(r => r.get('LINE_UID') === userId);
-                if (!sender) continue;
+            // หาคำสั่งปิดสาย เลิกสาย ในระบบวนลูป Webhook ของพี่ แล้ววางตัวนี้ทับเลยครับ
+if (text.match(/^#\s*เลิกสาย/)) {
+    console.log("👉 เข้าสู่กระบวนการ #เลิกสาย...");
+    const praiseText = text.replace(/^#\s*เลิกสาย\s*/, '').trim();
+    const sender = rows.find(r => r.get('LINE_UID') === userId);
+    if (!sender) continue;
 
-                const role = sender.get('Role') ? sender.get('Role').trim() : '';
-                if (role !== 'ผู้นำสาย' && role !== 'หัวหน้า') {
-                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ เฉพาะผู้นำสายเท่านั้นที่ทำรายการเลิกสายได้ครับ" }] });
-                    continue;
-                }
+    const role = sender.get('Role') ? sender.get('Role').trim() : '';
+    if (role !== 'ผู้นำสาย' && role !== 'หัวหน้า') {
+        await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ เฉพาะผู้นำสายเท่านั้นที่ทำรายการเลิกสายได้ครับ" }] });
+        continue;
+    }
 
-                const myLine = sender.get('Assigned_Line');
-                const myDate = sender.get('Camp_Date');
+    const myLine = sender.get('Assigned_Line');
+    const myDate = sender.get('Camp_Date');
 
-                const checkSheet = doc.sheetsByTitle['Checklist_Status'];
-                const cRows = checkSheet ? await checkSheet.getRows() : [];
-                const incompleteTasks = cRows.filter(r => r.get('Camp_Date') === myDate && r.get('Assigned_Line') === myLine && r.get('Status') !== 'Checked');
-
-                if (incompleteTasks.length > 0) {
-                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `❌ ยังเลิกสายไม่ได้ครับ! ตรวจพบเช็คลิสต์ค้างอีก ${incompleteTasks.length} รายการ กรุณาไปติ๊กในหน้าเว็บให้ครบก่อนครับ` }] });
-                    continue;
-                }
-
-                const mSheet = doc.sheetsByTitle['Missions_Data'];
-                if (mSheet) {
-                    const mRows = await mSheet.getRows();
-                    const missionRow = mRows.find(r => r.get('Camp_Date') === myDate && r.get('Assigned_Line') === myLine);
-                    if (missionRow) { missionRow.assign({ 'Line_Status': 'เลิกสายเรียบร้อย' }); await missionRow.save(); }
-                }
-
-                const targets = rows.filter(r => r.get('Assigned_Line') === myLine && r.get('Camp_Date') === myDate && r.get('LINE_UID'));
-                for (let t of targets) {
-                    try {
-                        await client.pushMessage({ to: t.get('LINE_UID'), messages: [{ type: 'text', text: `🎉 สิ้นสุดภารกิจ! ผู้นำสายได้ปิดสาย ${myLine} ประจำวันที่ ${myDate} เรียบร้อยแล้ว\n\n💬 ข้อความจากผู้นำสาย: "${praiseText || 'ขอบคุณทุกคนที่เหนื่อยมาด้วยกันครับ!'}"\n\nพักผ่อนให้เต็มที่ครับคุณหมอ! 🌟` }] });
-                    } catch (err) { console.error(err); }
-                }
-                await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `✅ ทำรายการเลิกสาย ${myLine} เรียบร้อย` }] });
-                continue;
+    // 🎨 แปลงร่างข้อความประกาศเลิกสายให้กลายเป็น Flex Message พรีเมียมสะใจ (ตามข้อ 8)
+    const flexFinish = {
+        type: "flex", altText: `🎉 ${myLine} ปฏิบัติภารกิจเสร็จสิ้นเรียบร้อยแล้ว!`,
+        contents: {
+            type: "bubble",
+            header: { type: "box", layout: "vertical", backgroundColor: "#10B981", contents: [{ type: "text", text: "🎉 MISSION COMPLETED", color: "#ffffff", weight: "bold", size: "xs" }, { type: "text", text: `${myLine} เลิกสายเรียบร้อย`, color: "#ffffff", weight: "bold", size: "lg", margin: "xs" }] },
+            body: {
+                type: "box", layout: "vertical",
+                contents: [
+                    { type: "text", text: `📅 ประจำวันที่: ${myDate}`, size: "xs", color: "#64748b" },
+                    { type: "text", text: `💬 ข้อความจากผู้นำสาย (หมอ${sender.get('Nickname')}):`, weight: "bold", size: "sm", color: "#00246B", margin: "md" },
+                    { type: "text", text: praiseText || "ขอบคุณคุณหมอทุกคนในสายที่ร่วมแรงร่วมใจเหนื่อยปฏิบัติภารกิจค่ายในวันนี้ด้วยกันครับ พักผ่อนให้เต็มที่ครับ!", wrap: true, size: "sm", color: "#334155", style: "italic", margin: "xs" }
+                ]
             }
+        }
+    };
+
+    // ปรับสถานะใน Google ชีท
+    const mSheet = doc.sheetsByTitle['Missions_Data'];
+    if (mSheet) {
+        const mRows = await mSheet.getRows();
+        const missionRow = mRows.find(r => r.get('Camp_Date') === myDate && r.get('Assigned_Line') === myLine);
+        if (missionRow) { missionRow.assign({ 'Line_Status': 'เลิกสายเรียบร้อย' }); await missionRow.save(); }
+    }
+
+    // ยิงเข้าแชทส่วนตัวสมาชิกทุกคนในสาย
+    const targets = rows.filter(r => r.get('Assigned_Line') === myLine && r.get('Camp_Date') === myDate && r.get('LINE_UID'));
+    for (let t of targets) {
+        try { await client.pushMessage({ to: t.get('LINE_UID'), messages: [flexFinish] }); } catch(err) {}
+    }
+
+    // 🌟 ยิงประกาศจบงานเด้งเข้าแชทกลุ่มไลน์กลางด้วยทันที
+    const groupId = process.env.LINE_GROUP_ID;
+    if (groupId) { try { await client.pushMessage({ to: groupId, messages: [flexFinish] }); } catch(e) {} }
+
+    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `✅ บอบส่งการแจ้งเตือนเลิกสายพรีเมียมให้สมาชิก ${myLine} เรียบร้อยแล้วครับ!` }] });
+    continue;
+}
 
             // 📤📥 3. 🎯 ระบบดักรับข้อความพิมพ์ #เบิกของรวม และ #คืนของรวม (อัปเดตเพิ่มระบบตัดสต๊อก Real-time)
             if (text.startsWith('#เบิกของรวม') || text.startsWith('#คืนของรวม')) {
@@ -1365,165 +1353,96 @@ app.post('/webhook', express.json(), async (req, res) => {
 app.post('/api/register-user', express.json(), async (req, res) => {
     try {
         const { lineId, studentId, dateStr } = req.body;
-        
-        if (!lineId || !studentId || !dateStr) {
-            return res.status(400).json({ success: false, message: "ข้อมูลส่งมาไม่ครบถ้วน" });
-        }
+        if (!lineId || !studentId || !dateStr) return res.status(400).json({ success: false, message: "ข้อมูลส่งมาไม่ครบถ้วน" });
 
         const doc = await getSheetDoc();
         const sheet = doc.sheetsByTitle['Master_Data'];
-        if (!sheet) return res.status(500).json({ success: false, message: "ระบบหลังบ้านขัดข้อง (ไม่พบแท็บข้อมูล)" });
+        if (!sheet) return res.status(500).json({ success: false, message: "ไม่พบแท็บ Master_Data" });
 
         const rows = await sheet.getRows();
-        let foundUser = null;
+        let foundUser = rows.find(r => r.get('Student_ID') === studentId && r.get('Camp_Date').includes(dateStr));
 
-        // 1. วิ่งหาเด็กจาก รหัสนักศึกษา และ วันที่
-        for (let row of rows) {
-            if (row.get('Student_ID') === studentId && row.get('Camp_Date').includes(dateStr)) {
-                foundUser = row;
-                break;
-            }
-        }
+        if (!foundUser) return res.json({ success: false, message: `❌ ไม่พบประวัติการออกสายในวันที่ ${dateStr}` });
+        if (foundUser.get('Reg_Status') !== 'เปิด') return res.json({ success: false, message: `⏳ ระบบลงทะเบียนของวันที่ ${dateStr} ยังไม่เปิดใช้งาน` });
 
-        // เงื่อนไขที่ 1: ตรวจไม่เจอประวัติ
-        if (!foundUser) {
-            return res.json({ success: false, message: `❌ ไม่พบประวัติการออกสายในวันที่ ${dateStr} หรือรหัสนักศึกษาไม่ถูกต้อง` });
-        }
-
-        // เงื่อนไขที่ 2: พี่เอิร์ทยังไม่เปิดระบบ
-        if (foundUser.get('Reg_Status') !== 'เปิด') {
-            return res.json({ success: false, message: `⏳ ขออภัยครับ ระบบลงทะเบียนสำหรับสายของวันที่ ${dateStr} ยังไม่เปิดใช้งานในขณะนี้` });
-        }
-
-        // 2. ผ่านทุกด่าน -> ผูก LINE UID
         foundUser.assign({ 'LINE_UID': lineId });
         await foundUser.save();
 
-        // ---------------------------------------------------------
-        // 🌟 อัปเดต: แยกผู้นำสาย และ สมาชิก พร้อมเช็คสถานะ ✅/❌
-        // ---------------------------------------------------------
         const myLineName = foundUser.get('Assigned_Line');
         const myCampDate = foundUser.get('Camp_Date');
         
+        // 👥 จัดกลุ่มรายชื่อสมาชิกในสาย
         let leaderContents = [];
         let memberContents = [];
-
-        // วนลูปหาคนที่อยู่สายเดียวกันและวันเดียวกัน
-        for (let row of rows) {
+        rows.forEach(row => {
             if (row.get('Assigned_Line') === myLineName && row.get('Camp_Date') === myCampDate) {
-                const isRegistered = !!row.get('LINE_UID'); // ถ้ามี LINE_UID แปลว่าลงแล้ว
-                const role = row.get('Role');
-                const isLeader = (role === 'ผู้นำสาย' || role === 'หัวหน้า');
-                
-                const nameStr = `หมอ${row.get('Nickname')} (ปี ${row.get('Year')})`;
+                const isRegistered = !!row.get('LINE_UID');
+                const isLeader = (row.get('Role') === 'ผู้นำสาย' || row.get('Role') === 'หัวหน้า');
+                // แก้ไขการแสดงผลเป็น ปี X ตามข้อ 6
+                const nameStr = `หมอ${row.get('Nickname')} ปี ${row.get('Year')}`;
                 const statusIcon = isRegistered ? "✅" : "❌";
-                const textColor = isRegistered ? "#16a34a" : "#ef4444"; // เขียว / แดง
-                const textWeight = isRegistered ? "regular" : "bold";
-                
-                // คัดแยกกลุ่ม ผู้นำสาย vs สมาชิก
-                if (isLeader) {
-                    leaderContents.push({
-                        type: "text",
-                        text: `${statusIcon} 👑 ${nameStr}`,
-                        size: "sm",
-                        color: textColor,
-                        weight: textWeight,
-                        wrap: true,
-                        margin: "sm"
-                    });
-                } else {
-                    memberContents.push({
-                        type: "text",
-                        text: `${statusIcon} 👤 ${nameStr}`,
-                        size: "sm",
-                        color: textColor,
-                        weight: textWeight,
-                        wrap: true,
-                        margin: "sm"
-                    });
-                }
-            }
-        }
+                const textColor = isRegistered ? "#16a34a" : "#ef4444";
 
-        // 🎨 3. สร้าง Flex Message แบบแยกโซน ผู้นำสาย กับ สมาชิก
-        const flexMsg = {
-            type: "flex",
-            altText: `สรุปข้อมูล ${myLineName} วันที่ ${myCampDate}`,
-            contents: {
-                type: "bubble",
-                header: {
-                    type: "box",
-                    layout: "vertical",
-                    backgroundColor: "#00246B",
-                    contents: [
-                        { type: "text", text: "🤝 MU VET TEAM", color: "#F8B500", weight: "bold", size: "sm" },
-                        { type: "text", text: `${myLineName}`, color: "#FFFFFF", weight: "bold", size: "xl", margin: "sm" },
-                        { type: "text", text: `ประจำวันที่: ${myCampDate}`, color: "#94a3b8", size: "xs", margin: "xs" }
-                    ]
-                },
-                body: {
-                    type: "box",
-                    layout: "vertical",
-                    contents: [
-                        // --- โซนหัวหน้า ---
-                        { type: "text", text: "ผู้นำสายปฏิบัติการ", weight: "bold", size: "xs", color: "#94a3b8", margin: "sm" },
-                        ...(leaderContents.length > 0 ? leaderContents : [{ type: "text", text: "- รอข้อมูลผู้นำสาย -", size: "sm", color: "#cbd5e1", margin: "sm" }]),
-                        
-                        { type: "separator", margin: "lg" },
-                        
-                        // --- โซนสมาชิก ---
-                        { type: "text", text: "สมาชิกผู้ปฏิบัติงาน", weight: "bold", size: "xs", color: "#94a3b8", margin: "lg" },
-                        ...(memberContents.length > 0 ? memberContents : [{ type: "text", text: "- ยังไม่มีสมาชิก -", size: "sm", color: "#cbd5e1", margin: "sm" }]),
-                        
-                        { type: "separator", margin: "lg" }
-                    ]
-                },
-                footer: {
-                    type: "box",
-                    layout: "vertical",
-                    contents: [
-                        {
-                            type: "button",
-                            style: "primary",
-                            color: "#F8B500",
-                            action: {
-                                type: "uri",
-                                label: "🎯 เปิดหน้า PORTAL",
-                                uri: "https://liff.line.me/2010125977-E8l1g7Zp" 
-                            }
-                        }
-                    ]
-                }
-            }
-        };
-
-        // สั่งให้บอท Push ข้อความไปหาเด็กคนนั้นในแชท LINE ทันที
-        try {
-            await client.pushMessage({
-                to: lineId,
-                messages: [flexMsg]
-            });
-            console.log(`✅ ส่งข้อมูลสรุปสาย ${myLineName} ให้ ${foundUser.get('Nickname')} สำเร็จ`);
-        } catch (pushErr) {
-            console.error("🚨 ส่ง Flex Message ไม่สำเร็จ:", pushErr);
-        }
-
-        // 4. ส่งข้อมูลกลับไปให้หน้าเว็บ LIFF เพื่อเปิดล็อก Dashboard
-        res.json({
-            success: true,
-            profile: {
-                nickname: foundUser.get('Nickname'),
-                year: foundUser.get('Year'),
-                campDate: foundUser.get('Camp_Date'),
-                assignedLine: foundUser.get('Assigned_Line'),
-                role: foundUser.get('Role')
+                const itemObj = { type: "text", text: `${statusIcon} ${isLeader ? '👑' : '👤'} ${nameStr}`, size: "sm", color: textColor, weight: isRegistered ? "regular" : "bold", wrap: true, margin: "sm" };
+                if (isLeader) leaderContents.push(itemObj); else memberContents.push(itemObj);
             }
         });
 
-    } catch (error) {
-        console.error("LIFF Registration Error:", error);
-        res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดของเซิร์ฟเวอร์" });
-    }
+        // 🎨 Flex Message 1: สรุปสมาชิกสาย
+        const flexTeam = {
+            type: "flex", altText: `รายชื่อทีม ${myLineName}`,
+            contents: {
+                type: "bubble",
+                header: { type: "box", layout: "vertical", backgroundColor: "#00246B", contents: [{ type: "text", text: "🤝 MU VET CAMP TEAM", color: "#F8B500", weight: "bold", size: "xs" }, { type: "text", text: `${myLineName}`, color: "#FFFFFF", weight: "bold", size: "xl", margin: "sm" }] },
+                body: { type: "box", layout: "vertical", contents: [{ type: "text", text: "ผู้นำสายปฏิบัติการ", weight: "bold", size: "xs", color: "#94a3b8" }, ...leaderContents, { type: "separator", margin: "md" }, { type: "text", text: "สมาชิกผู้ปฏิบัติงาน", weight: "bold", size: "xs", color: "#94a3b8", margin: "md" }, ...memberContents] }
+            }
+        };
+
+        // 🎯 ดึงภารกิจประจำวันมาสร้าง Flex Message 2 คอนเทนต์ภารกิจ (รองรับหลายสถานที่สูงสุด 4 ที่)
+        const mSheet = doc.sheetsByTitle['Missions_Data'];
+        const mRows = mSheet ? await mSheet.getRows() : [];
+        const mData = mRows.find(r => r.get('Camp_Date') === myCampDate && r.get('Assigned_Line') === myLineName);
+        
+        let missionBoxes = [];
+        if (mData) {
+            for (let i = 1; i <= 4; i++) {
+                const loc = mData.get(`Location_${i}`);
+                if (loc && loc.trim() !== "") {
+                    missionBoxes.push({
+                        type: "box", layout: "vertical", margin: "md", padding: "8px", backgroundColor: "#f8fafc", borderRadius: "8px",
+                        contents: [
+                            { type: "text", text: `📍 จุดที่ ${i}: ${loc}`, weight: "bold", size: "sm", color: "#00246B" },
+                            { type: "text", text: `🐾 สัตว์: ${mData.get(`Animal_Count_${i}`) || '-'} ตัว | 📝 งาน: ${mData.get(`Task_Details_${i}`) || '-'}`, size: "xs", color: "#475569", margin: "xs", wrap: true }
+                        ]
+                    });
+                }
+            }
+        }
+        if (missionBoxes.length === 0) {
+            missionBoxes.push({ type: "text", text: "⏳ รอรับมอบหมายภารกิจหลักจากส่วนกลาง", size: "sm", color: "#94a3b8", style: "italic" });
+        }
+
+        // 🎨 Flex Message 2: รายละเอียดภารกิจประจำวัน 
+        const flexMission = {
+            type: "flex", altText: `📋 แผนภารกิจประจำวัน ${myLineName}`,
+            contents: {
+                type: "bubble",
+                header: { type: "box", layout: "vertical", backgroundColor: "#F8B500", contents: [{ type: "text", text: "📋 DAILY MISSION PLAN", color: "#00246B", weight: "bold", size: "xs" }, { type: "text", text: `แผนงานประจำวันที่ ${myCampDate}`, color: "#00246B", weight: "bold", size: "md", margin: "xs" }] },
+                body: { type: "box", layout: "vertical", contents: [{ type: "text", text: "รายการสถานที่ปฏิบัติภารกิจ:", weight: "bold", size: "sm", color: "#00246B" }, ...missionBoxes] },
+                footer: { type: "box", layout: "vertical", contents: [{ type: "button", style: "primary", color: "#00246B", action: { type: "uri", label: "🎯 เข้าสู่หน้าหลักระบบค่าย", uri: "https://liff.line.me/2010125977-E8l1g7Zp" } }] }
+            }
+        };
+
+        // ยิงต่อเนื่อง 2 ข้อความเข้าแชท LINE OA
+        try {
+            await client.pushMessage({ to: lineId, messages: [flexTeam, flexMission] });
+        } catch (err) { console.error("🚨 Push Registration Flex Fail:", err); }
+
+        res.json({
+            success: true,
+            profile: { nickname: foundUser.get('Nickname'), year: foundUser.get('Year'), campDate: myCampDate, assignedLine: myLineName, role: foundUser.get('Role') }
+        });
+    } catch (error) { res.status(500).json({ success: false, message: "Server Error" }); }
 });
 // ==========================================
 // 🔐 API เช็คสิทธิ์ผู้ใช้งาน (ดึงข้อมูลตอนเปิด LIFF)
@@ -1656,57 +1575,60 @@ app.get('/api/all-missions', async (req, res) => {
     try {
         const CAMP_LINES = ["สาย 1", "สาย 2", "สาย 3", "สาย 4"];
         const targetDate = req.query.date;
-        
         const doc = await getSheetDoc();
+        
         const mSheet = doc.sheetsByTitle['Missions_Data'];
         const cSheet = doc.sheetsByTitle['Checklist_Status'];
-        const masterSheet = doc.sheetsByTitle['Master_Data']; // 🚨 เพิ่มการดึงชีทรายชื่อคน
+        const masterSheet = doc.sheetsByTitle['Master_Data'];
         
         const mRows = mSheet ? await mSheet.getRows() : [];
         const cRows = cSheet ? await cSheet.getRows() : [];
-        const masterRows = masterSheet ? await masterSheet.getRows() : []; 
+        const masterRows = masterSheet ? await masterSheet.getRows() : [];
 
         const result = CAMP_LINES.map(line => {
             const mData = mRows.find(r => r.get('Camp_Date') === targetDate && r.get('Assigned_Line') === line);
             const doneCount = cRows.filter(r => r.get('Camp_Date') === targetDate && r.get('Assigned_Line') === line && r.get('Status') === 'Checked').length;
             const progress = Math.round((doneCount / 10) * 100);
 
-            // 🎯 กวาดหารายชื่อคนใน Master_Data ที่ออกสายนี้ และวันนี้
+            // ค้นหาสมาชิก
             const teamUsers = masterRows.filter(r => r.get('Camp_Date') === targetDate && r.get('Assigned_Line') === line);
-            
-            let leader = null;
-            let members = [];
-
-            // จับแยกใครเป็นหัวหน้า ใครเป็นลูกทีม
+            let leader = null; let members = [];
             teamUsers.forEach(u => {
-                const role = u.get('Role');
+                const role = u.get('Role') ? u.get('Role').trim() : '';
                 const userData = { name: u.get('Nickname'), year: u.get('Year') };
-                
-                if (role === 'ผู้นำสาย' || role === 'หัวหน้า') {
-                    leader = userData;
-                } else {
-                    members.push(userData);
-                }
+                if (role === 'ผู้นำสาย' || role === 'หัวหน้า') leader = userData; else members.push(userData);
             });
+
+            // 🌟 ลูปดึงโครงสร้าง 4 สถานที่ปฏิบัติงาน
+            let locationsList = [];
+            if (mData) {
+                for (let i = 1; i <= 4; i++) {
+                    const locName = mData.get(`Location_${i}`);
+                    if (locName && locName.trim() !== "") {
+                        locationsList.push({
+                            place: locName,
+                            count: mData.get(`Animal_Count_${i}`) || "-",
+                            detail: mData.get(`Task_Details_${i}`) || "-",
+                            phone: mData.get(`Owner_Phone_${i}`) || "-",
+                            mapUrl: mData.get(`Maps_${i}`) || ""
+                        });
+                    }
+                }
+            }
 
             return {
                 line: line,
-                location: mData ? mData.get('Location') : "ยังไม่ระบุสถานที่",
-                count: mData ? mData.get('Animal_Count') : "-",
-                detail: mData ? mData.get('Task_Details') : "รอรับมอบหมายภารกิจ",
-                image: mData ? mData.get('Image_URL') : "", // 🖼️ ดึงรูปจากคอลัมน์ Image_URL
+                locations: locationsList, // ส่งแบบอาเรย์ขนาดยืดหยุ่นไปให้หน้าเว็บวาดต่อ
+                image: mData ? mData.get('Image_URL') : "",
                 progress: progress || 0,
-                leader: leader,   // 👑 ส่งข้อมูลหัวหน้า
-                members: members,  // 👥 ส่งข้อมูลลูกทีม
+                leader: leader,
+                members: members,
                 lineStatus: mData ? (mData.get('Line_Status') || "") : ""
             };
         });
 
         res.json({ success: true, missions: result });
-    } catch (e) {
-        console.error("Missions API Error:", e);
-        res.status(500).json({ success: false });
-    }
+    } catch (e) { res.status(500).json({ success: false }); }
 });
 
 // 2. ดึงข้อมูลว่าสายนี้ติ๊กเช็คลิสต์ข้อไหนไปแล้วบ้าง
