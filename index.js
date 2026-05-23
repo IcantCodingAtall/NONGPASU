@@ -901,6 +901,9 @@ app.get('/api/team-taken-items', async (req, res) => {
     } catch(e) { console.error(e); res.status(500).json({ items: [] }); }
 });
 
+// ==========================================
+// 📦 API 2: บันทึกเบิก/คืน (ระบบ Batch Update แก้ปัญหา 429 Quota Limit)
+// ==========================================
 app.post('/api/inventory-action', express.json(), async (req, res) => {
     try {
         const cleanStr = (v, def) => (v === undefined || v === null || String(v).trim() === 'undefined' || String(v).trim() === '') ? def : String(v).trim();
@@ -919,7 +922,7 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
         const invRows = await invSheet.getRows();
         let flexItemsList = [];
 
-        // 🚨 1. เช็คของในคลังก่อนว่าพอไหม (ใส่ .trim() ดักเว้นวรรค)
+        // 1. เช็คของในคลังก่อนว่าพอไหม
         if (action === 'เบิกของ') {
             for (let item of items) {
                 const itemNameTrimmed = cleanStr(item.name, '');
@@ -933,7 +936,7 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
             }
         }
 
-        // 2. บันทึกประวัติลง Log แบบรวบยอด
+        // 2. บันทึกประวัติลง Log แบบรวบยอด (Batch Insert)
         const rowsToInsert = [];
         if (action === 'เบิกของ') {
             items.forEach(item => rowsToInsert.push({ 'Timestamp': new Date().toLocaleString('th-TH'), 'Staff': staffName, 'Item_Name': cleanStr(item.name, ''), 'Amount_Taken': cleanNum(item.qty), 'LINE_ID': lineId, 'Status': 'ยังไม่คืน', 'Camp_Date': date, 'Camp_Line': line }));
@@ -943,31 +946,40 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
             await doc.sheetsByTitle['Log_Return'].addRows(rowsToInsert);
         }
 
-        // 🌟 3. อัปเดตตัดสต๊อกหน้า Inventory (หาแถวเจอ 100%)
+        // 🌟 3. อัปเดตตัดสต๊อกหน้า Inventory (Batch Update: เซฟ 1 ครั้ง)
+        await invSheet.loadCells(); // โหลดเซลล์ทั้งหมดเข้าหน่วยความจำ
+        const qtyColIdx = invSheet.headerValues.indexOf('จำนวน');
+
         for (let item of items) {
             const itemNameTrimmed = cleanStr(item.name, '');
             const targetRow = invRows.find(r => (r.get('รายการ') || '').trim() === itemNameTrimmed);
             let finalStock = 0;
             
-            if (targetRow) {
+            if (targetRow && qtyColIdx !== -1) {
                 let currentStock = parseInt(targetRow.get('จำนวน')) || 0;
                 if (action === 'เบิกของ') currentStock -= cleanNum(item.qty);
                 else if (action === 'คืนของ') currentStock += cleanNum(item.qty);
                 finalStock = currentStock < 0 ? 0 : currentStock;
-                targetRow.set('จำนวน', finalStock);
-                await targetRow.save(); 
+                
+                // อัปเดตค่าในเซลล์โดยตรง (ยังไม่ยิง API)
+                const cell = invSheet.getCell(targetRow.rowNumber - 1, qtyColIdx);
+                cell.value = finalStock;
             } else {
                 console.warn(`⚠️ หาอุปกรณ์ชื่อ [${itemNameTrimmed}] ไม่เจอในชีท Inventory`);
             }
             flexItemsList.push({ name: itemNameTrimmed, qty: cleanNum(item.qty), unit: cleanStr(item.unit, 'ชิ้น'), remaining: finalStock });
         }
+        await invSheet.saveUpdatedCells(); // 🚀 ยิงคำสั่งเซฟทั้งหมดขึ้น Google Sheets ในครั้งเดียว
 
-        // 🌟 4. ซ่อมสถานะให้เป็น "คืนแล้ว" ใน Log_Takeout
+        // 🌟 4. ซ่อมสถานะให้เป็น "คืนแล้ว" ใน Log_Takeout (Batch Update: เซฟ 1 ครั้ง)
         if (action === 'คืนของ') {
             const tkSheet = doc.sheetsByTitle['Log_Takeout'];
             if(tkSheet) {
                 const tkRows = await tkSheet.getRows();
-                let rowsToUpdate = [];
+                await tkSheet.loadCells();
+                const statusColIdx = tkSheet.headerValues.indexOf('Status');
+                let hasUpdates = false;
+
                 for (let item of items) {
                     const itemNameTrimmed = cleanStr(item.name, '');
                     tkRows.forEach(r => {
@@ -976,16 +988,21 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
                             (r.get('Item_Name') || '').trim() === itemNameTrimmed && 
                             r.get('Status') !== 'คืนแล้ว') {
                             
-                            r.set('Status', 'คืนแล้ว');
-                            if (!rowsToUpdate.includes(r)) rowsToUpdate.push(r);
+                            if (statusColIdx !== -1) {
+                                const cell = tkSheet.getCell(r.rowNumber - 1, statusColIdx);
+                                cell.value = 'คืนแล้ว';
+                                hasUpdates = true;
+                            }
                         }
                     });
                 }
-                for (let r of rowsToUpdate) { await r.save(); }
+                if (hasUpdates) {
+                    await tkSheet.saveUpdatedCells(); // 🚀 ยิงคำสั่งเซฟทั้งหมดขึ้น Google Sheets ในครั้งเดียว
+                }
             }
         }
 
-        // 5. บิลด์ Flex Message
+        // 5. บิลด์ Flex Message 
         const colorMain = action === 'เบิกของ' ? '#00246B' : '#dc2626'; 
         const icon = action === 'เบิกของ' ? '📤' : '📥';
         let itemListHtml = flexItemsList.map(i => ({
@@ -996,11 +1013,14 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
             ]
         }));
 
-        const flexMsg = { type: "flex", altText: `แจ้งเตือนทำรายการ${action}`, contents: { type: "bubble", header: { type: "box", layout: "vertical", backgroundColor: colorMain, contents: [{ type: "text", text: `${icon} รายการ${action}`, color: "#ffffff", weight: "bold", size: "lg" }, { type: "text", text: `ประจำ ${line} (${date})`, color: "#e2e8f0", size: "xs", margin: "sm" }] }, body: { type: "box", layout: "vertical", contents: [{ type: "text", text: `👤 หมอ${staffName}`, size: "xs", color: "#94a3b8", margin: "sm" }, { type: "separator", margin: "md" }, ...itemListHtml] } } };
+        const flexMsg = { type: "flex", altText: `แจ้งเตือนทำรายการ${action}`, contents: { type: "bubble", header: { type: "box", layout: "vertical", backgroundColor: colorMain, contents: [{ type: "text", text: `${icon} รายการ${action}`, color: "#ffffff", weight: "bold", size: "lg" }, { type: "text", text: `ประจำ ${line} (${date})`, color: "#e2e8f0", size: "xs", margin: "sm" }] }, body: { type: "box", layout: "vertical", contents: [{ type: "text", text: `👤 ผู้ทำรายการ: หมอ${staffName}`, size: "xs", color: "#94a3b8", margin: "sm" }, { type: "separator", margin: "md" }, ...itemListHtml] } } };
 
+        // ยิงแจ้งเตือนแชทส่วนตัวและแชทกลุ่ม (ซ่อมบัคตัวแปร flexReport ให้เป็น flexMsg)
         try { await client.pushMessage({ to: lineId, messages: [flexMsg] }); } catch(e){}
         const groupId = process.env.LINE_GROUP_ID;
-        if (groupId) { try { await client.pushMessage({ to: groupId, messages: [flexMsg] }); } catch(e){} }
+        if (groupId) { 
+            try { await client.pushMessage({ to: groupId, messages: [flexMsg] }); } catch(e){} 
+        }
 
         res.json({ success: true });
 
@@ -1017,18 +1037,14 @@ app.post('/api/inventory-action', express.json(), async (req, res) => {
 // ==========================================
 // 📝 API 3: บันทึกหัตถการ & แก้ไขคำว่า undefined ให้เป็น 0 แบบถาวร (Failsafe)
 // ==========================================
+// ==========================================
+// 📝 API 3: บันทึกหัตถการ (ซ่อมบัค flexReport ทำระบบแครช + เพิ่ม Feces)
+// ==========================================
 app.post('/api/liff/procedure', express.json(), async (req, res) => {
     try {
-        console.log("📥 [API หัตถการ] ข้อมูลดิบที่ส่งมาจากฟอร์มหน้าเว็บ:", JSON.stringify(req.body));
-
-        // 🧹 ฟังก์ชันกรองตัวเลขและข้อความ ป้องกันคำว่า 'undefined' หลุดรอดไปในระบบ
-        const cleanNum = (v) => {
-            if (v === undefined || v === null || String(v).trim() === 'undefined' || String(v).trim() === '') return 0;
-            return parseInt(v) || 0;
-        };
+        const cleanNum = (v) => parseInt(v) || 0;
         const cleanStr = (v, def) => (v === undefined || v === null || String(v).trim() === '' || String(v).trim() === 'undefined') ? def : String(v).trim();
 
-        // 👥 ดึงข้อมูลทั่วไป
         const lineId = req.body.lineId;
         const staffName = cleanStr(req.body.staffName, 'ผู้ปฏิบัติงาน');
         const date = cleanStr(req.body.date, '-');
@@ -1037,32 +1053,26 @@ app.post('/api/liff/procedure', express.json(), async (req, res) => {
         const ownerPhone = cleanStr(req.body.ownerPhone, '-');
         const ownerAddress = cleanStr(req.body.ownerAddress, '-');
         
-        // 🐄 ดึงจำนวนสัตว์ (ดักรองรับทุกชื่อตัวแปรเผื่อหน้าเว็บส่งมาสลับกัน)
         const cows = cleanNum(req.body.cows || req.body.cow);
         const buffs = cleanNum(req.body.buffs || req.body.buff || req.body.buffalo);
         const goats = cleanNum(req.body.goats || req.body.goat);
         const sheeps = cleanNum(req.body.sheeps || req.body.sheep);
-
-        // 🦠 ดึงข้อมูลยาและวัคซีน
         const fmd = cleanNum(req.body.fmd);
         const lsd = cleanNum(req.body.lsd);
-        const iver = cleanNum(req.body.iver || req.body.ivermectin);
-        const alben = cleanNum(req.body.alben || req.body.albendazole);
-        const chloro = cleanNum(req.body.chloro || req.body.chloramine);
-        const dexam = cleanNum(req.body.dexam || req.body.dexamvet);
-
-        // 💉 🕵️‍♂️ สับรางจับคู่ตัวแปรเก่า-ใหม่ ป้องกันบัค Undefined 100%
-        // หน้าเว็บอาจส่งมาเป็น edta/clot หรือส่งรวมมาเป็นชื่อ blood หน้าหลังบ้านรองรับหมดครับ
-        const edta = cleanNum(req.body.edta || req.body.EDTA_Tube || req.body.blood); 
-        const clot = cleanNum(req.body.clot || req.body.Clot_Tube || 0); 
-        const feces = cleanNum(req.body.feces || req.body.Feces || 0);
-        const vitb = cleanNum(req.body.vitb || req.body.vitamin || req.body.vitaminb || req.body.VitaminB);
+        const edta = cleanNum(req.body.edta); 
+        const clot = cleanNum(req.body.clot); 
+        const feces = cleanNum(req.body.feces);
+        const iver = cleanNum(req.body.iver);
+        const alben = cleanNum(req.body.alben);
+        const chloro = cleanNum(req.body.chloro);
+        const dexam = cleanNum(req.body.dexam);
+        const vitb = cleanNum(req.body.vitb); 
 
         const doc = await getSheetDoc();
         const sheet = doc.sheetsByTitle['Log_Procedures'];
         
+        // 🌟 บันทึกลง Google Sheet
         if (sheet) {
-            // 🌟 บันทึกลงคอลัมน์ชีทของพี่เป๊ะๆ ข้อมูลลงล็อกสมบูรณ์แบบ
             await sheet.addRow({ 
                 'Timestamp': new Date().toLocaleString('th-TH'), 
                 'Staff_Name': staffName, 
@@ -1095,7 +1105,7 @@ app.post('/api/liff/procedure', express.json(), async (req, res) => {
         if (dexam > 0) othersArr.push(`Dexam (${dexam})`);
         const othersStr = othersArr.length > 0 ? othersArr.join(', ') : '-';
 
-        // 🎨 ปรับปรุง Flex Message โครงสร้างใหม่ ไม่เรียกใช้ชื่อตัวแปรดิบที่พัง ดึงจากเครื่องกรองคำโดยตรง
+        // 🎨 สร้าง Flex Message ตั้งชื่อตัวแปรให้ตรงกับคำสั่งด้านล่าง (flexMsg)
         const flexMsg = {
             type: "flex", altText: `ยอดหัตถการ ${line}`,
             contents: {
@@ -1111,8 +1121,7 @@ app.post('/api/liff/procedure', express.json(), async (req, res) => {
                         { type: "text", text: `วัว:${cows} | ควาย:${buffs} | แพะ:${goats} | แกะ:${sheeps}`, size: "xs", color: "#94a3b8", margin: "sm" },
                         { type: "separator", margin: "md" },
                         
-                        // รายการแล็บและเวชภัณฑ์ ปลอดภัยไร้คำว่า undefined
-                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "💉 Blood (EDTA / Clot)", size: "sm", color: "#334155" }, { type: "text", text: `${edta} / ${clot} หลอด`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "💉 Blood (EDTA/Clot)", size: "sm", color: "#334155" }, { type: "text", text: `${edta} / ${clot} หลอด`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
                         { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "💩 Feces Sample", size: "sm", color: "#334155" }, { type: "text", text: `${feces} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
                         { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "🦠 FMD / LSD", size: "sm", color: "#334155" }, { type: "text", text: `${fmd} / ${lsd} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
                         { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "💊 Iver / Alben", size: "sm", color: "#334155" }, { type: "text", text: `${iver} / ${alben} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
@@ -1125,10 +1134,9 @@ app.post('/api/liff/procedure', express.json(), async (req, res) => {
             }
         };
 
-        // ส่งเข้าแชทส่วนตัวคนคีย์ข้อมูล
+        // 🚨 ซ่อมจุดตาย: ใช้ชื่อตัวแปร flexMsg (แทน flexReport เดิมที่ทำระบบแครช)
         try { await client.pushMessage({ to: lineId, messages: [flexMsg] }); } catch(e) {}
         
-        // ส่งเข้าไลน์กลุ่มปศุสัตว์หลักตามค่าที่ผูกใน env
         const groupId = process.env.LINE_GROUP_ID;
         if (groupId) { 
             try { await client.pushMessage({ to: groupId, messages: [flexMsg] }); } catch(err) {} 
@@ -1137,6 +1145,11 @@ app.post('/api/liff/procedure', express.json(), async (req, res) => {
         res.json({ success: true });
     } catch (e) {
         console.error("Procedure Save Error:", e);
+        // ดักจับโควต้าเต็ม
+        const msg = (e.message || "").toLowerCase();
+        if (msg.includes("quota") || msg.includes("429") || msg.includes("rate limit") || msg.includes("too many requests")) {
+            return res.status(429).json({ success: false, message: "ระบบหมดพลัง ⏳ ขอให้รอ 1 นาทีแล้วกดทำรายการอีกครั้ง ขออภัยครับ" });
+        }
         res.status(500).json({ success: false });
     }
 });
