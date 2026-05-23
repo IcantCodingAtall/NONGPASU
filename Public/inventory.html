@@ -325,7 +325,6 @@
             window.scrollTo({ top: y, behavior: 'smooth' });
         }
     }
-
     // 🌟 ซ่อมแซมปุ่มบวกลบให้หาตำแหน่งเจอ 100%
     function updateQty(originalIndex, change) {
         let item = inventoryData.find(i => i.originalIndex === originalIndex);
@@ -383,14 +382,58 @@
 
         selectedItems.forEach(item => {
             const labelWord = isReturnMode ? "คืนจำนวน" : "เบิกจำนวน";
+            const colorClass = isReturnMode ? "color: #059669;" : "color: #dc2626;";
+            // 🌟 คำนวณยอดคงเหลือที่จะโชว์ให้น้องดู
+            const expectedRemaining = isReturnMode ? (item.stock + item.selectedQty) : (item.stock - item.selectedQty);
+            
             summaryList.insertAdjacentHTML('beforeend', `
-                <div class="summary-item">
-                    <div class="summary-name">${item.name}</div>
-                    <div class="summary-qty">${labelWord} ${item.selectedQty} ${item.unit}</div>
+                <div style="padding: 10px; border-bottom: 1px dashed #cbd5e1; background: #f8fafc; border-radius: 8px; margin-bottom: 6px;">
+                    <div style="font-size: 13px; font-weight: bold; color: #00246B;">${item.name}</div>
+                    <div style="display: flex; justify-content: space-between; margin-top: 4px; align-items: center;">
+                        <span style="font-size: 12px; font-weight: bold; ${colorClass}">${labelWord} ${item.selectedQty} ${item.unit}</span>
+                        <span style="font-size: 10px; color: #64748b; background: #e2e8f0; padding: 3px 6px; border-radius: 4px;">เหลือคลัง: ${expectedRemaining}</span>
+                    </div>
                 </div>
             `);
         });
         document.getElementById("summaryModal").style.display = "flex";
+    }
+
+    async function submitForm() {
+        const confirmBtn = document.querySelector('.btn-confirm');
+        confirmBtn.innerText = "⏳ กำลังบันทึก...";
+        confirmBtn.disabled = true;
+
+        const campDate = document.getElementById("campDate").value;
+        const campLine = document.getElementById("campLine").value;
+        const selectedItems = inventoryData.filter(i => i.selectedQty > 0);
+        
+        const payloadItems = selectedItems.map(i => ({ name: i.name, qty: i.selectedQty, unit: i.unit }));
+
+        try {
+            const res = await fetch('/api/inventory-action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lineId: myLineId, staffName: myDisplayName, date: campDate, line: campLine, action: isReturnMode ? 'คืนของ' : 'เบิกของ', items: payloadItems })
+            });
+
+            const result = await res.json();
+            // 🚨 ดักจับ Error ส่งข้อความตรงถึงน้องๆ
+            if (!res.ok || !result.success) throw new Error(result.message || "เกิดข้อผิดพลาดจากเซิร์ฟเวอร์");
+
+            alert(`✅ บันทึกรายการ${isReturnMode ? 'คืน' : 'เบิก'}สำเร็จเรียบร้อยครับ!`);
+            if (liff.isInClient()) liff.closeWindow();
+            else { closeSummaryModal(); confirmBtn.innerText = "✅ ยืนยันข้อมูล"; confirmBtn.disabled = false; window.location.reload(); }
+
+        } catch (e) {
+            console.error(e);
+            // 🚨 ล้างข้อความแปลกๆ ออก แล้วแจ้งเตือน "ระบบหมดพลัง" กลางจอ
+            const errMsg = e.message.replace(/^Error:\s*/, '');
+            alert("❌ การทำรายการถูกยกเลิก:\n\n" + errMsg);
+            
+            confirmBtn.innerText = "✅ ยืนยันข้อมูล";
+            confirmBtn.disabled = false;
+        }
     }
 
     function closeSummaryModal() { document.getElementById("summaryModal").style.display = "none"; }

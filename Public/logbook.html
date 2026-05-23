@@ -363,7 +363,14 @@
                 }
             } catch (error) {
                 console.error("Error submitting data:", error);
-                alert("❌ เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้งครับ");
+                
+                // 🚨 ดักจับข้อความ "ระบบหมดพลัง" จากหลังบ้านมาแจ้งเตือน
+                let errorTxt = "เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้งครับ";
+                if (error.message) {
+                    errorTxt = error.message.replace(/^Error:\s*/, '');
+                }
+                alert(`❌ การส่งข้อมูลล้มเหลว:\n\n${errorTxt}`);
+                
                 btn.innerText = '✅ บันทึกข้อมูล';
                 btn.disabled = false;
             }
