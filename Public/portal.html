@@ -1150,13 +1150,30 @@
                 promises.push(fetch('/api/liff/procedure', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payloadProc) }));
             }
 
+            // 🌟 ตัวดึงข้อมูลอึแบบใหม่ จัดเป็น Object ตรงตัว
             let labAnimalsList = [];
             document.querySelectorAll('.lab-card').forEach(card => {
                 const no = card.querySelector('.e-animal-no').value; if(!no) return;
                 let bloodP = []; card.querySelectorAll('.e-blood-cb:checked').forEach(cb => bloodP.push(cb.value));
-                const getFec = (cls) => { let r = []; const inputs = card.querySelectorAll(`.${cls}`); const names = ['Strongyle','Trichuris','Coccidia','Capillaria', card.querySelector(`.${cls}-other`).value]; inputs.forEach((inp, i) => { if(inp.value) r.push({name: names[i]||'อื่น', epg: parseInt(inp.value)}); }); return r; };
+                const oBlood = card.querySelector('.e-blood-other').value.trim(); if(oBlood) bloodP.push(oBlood);
                 
-                labAnimalsList.push({ animalNo: no, species: card.querySelector('.e-species').value, labs: { pcv: card.querySelector('.e-pcv').value, bloodParasites: bloodP, roseBengal: card.querySelector('.e-rb').value, flotation: getFec('i-flot'), sedimentation: getFec('i-sed') } });
+                const getFec = (cls) => {
+                    const inputs = card.querySelectorAll(`.${cls}`);
+                    const getVal = (inp) => inp.value.trim() !== '' ? parseInt(inp.value) : "";
+                    return {
+                        Strongyle: getVal(inputs[0]),
+                        Trichuris: getVal(inputs[1]),
+                        Coccidia: getVal(inputs[2]),
+                        Capillaria: getVal(inputs[3]),
+                        OtherName: card.querySelector(`.${cls}-other`).value.trim(),
+                        OtherValue: getVal(inputs[4])
+                    };
+                };
+                
+                labAnimalsList.push({ 
+                    animalNo: no, species: card.querySelector('.e-species').value, 
+                    labs: { pcv: card.querySelector('.e-pcv').value, bloodParasites: bloodP, roseBengal: card.querySelector('.e-rb').value, flotation: getFec('i-flot'), sedimentation: getFec('i-sed') } 
+                });
             });
 
             if(labAnimalsList.length > 0) {

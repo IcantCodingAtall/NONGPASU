@@ -421,110 +421,133 @@ app.post('/api/liff/procedure', express.json(), async (req, res) => {
 });
 
 // 2. ท่อรับข้อมูลผลตรวจแล็บ -> คำนวณวิเคราะห์เกณฑ์ทางการแพทย์ -> บันทึกแยกช่องชีท -> ยิงสไลด์เตือนสีแดงเข้ากลุ่ม
-app.post('/api/liff/lab', async (req, res) => {
+// ==========================================
+// 🔬 API 5: บันทึกผลแล็บ (ซิงค์ตรงคอลัมน์ + แปรผล Real-time + Flex Message)
+// ==========================================
+// ==========================================
+// 🔬 API 5: บันทึกผลแล็บ (รวมข้อมูลลงชีทเดิม + แปรผล Real-time + ส่ง Flex คู่หัตถการ)
+// ==========================================
+app.post('/api/liff/lab', express.json(), async (req, res) => {
     try {
-        const payload = req.body;
-        const doc = await getSheetDoc(); 
-        const labSheet = doc.sheetsByTitle['Log_LabResults'];
-        const carouselBubbles = []; 
+        const { lineId, staffName, date, line, ownerName, animals } = req.body;
+        if (!animals || animals.length === 0) return res.json({ success: true });
 
-        for (const d of payload.animals) {
-            let interpretationArr = [];
+        const doc = await getSheetDoc();
+        const sheet = doc.sheetsByTitle['Log_LabResults'];
+
+        const rowsToInsert = [];
+        let labFlexContents = [];
+
+        // 🌟 ฟังก์ชันรวมข้อความอึ จัดเรียงพร้อมเติมคำว่า /field
+        const formatFecFlex = (fecObj) => {
+            let parts = [];
+            if (fecObj.Strongyle !== "" && fecObj.Strongyle != null) parts.push(`Strongyle: ${fecObj.Strongyle}/field`);
+            if (fecObj.Trichuris !== "" && fecObj.Trichuris != null) parts.push(`Trichuris: ${fecObj.Trichuris}/field`);
+            if (fecObj.Coccidia !== "" && fecObj.Coccidia != null) parts.push(`Coccidia: ${fecObj.Coccidia}/field`);
+            if (fecObj.Capillaria !== "" && fecObj.Capillaria != null) parts.push(`Capillaria: ${fecObj.Capillaria}/field`);
+            if (fecObj.OtherName && fecObj.OtherValue !== "" && fecObj.OtherValue != null) parts.push(`${fecObj.OtherName}: ${fecObj.OtherValue}/field`);
+            return parts.length > 0 ? parts.join(', ') : 'Not Found';
+        };
+
+        animals.forEach(anim => {
+            const labs = anim.labs || {};
+            const flot = labs.flotation || {};
+            const sed = labs.sedimentation || {};
+
+            const bloodStr = labs.bloodParasites && labs.bloodParasites.length > 0 ? labs.bloodParasites.join(', ') : 'Negative';
+            const flotFlexStr = formatFecFlex(flot);
+            const sedFlexStr = formatFecFlex(sed);
+            const rbStr = labs.roseBengal || '-';
+            const pcvStr = labs.pcv || '-';
+
+            // 🧠 1. ระบบแปรผล PCV แบบ Real-time (คำนวณตามชนิดสัตว์)
+            let pcvStatusText = "";
+            let pcvIssue = false;
+            if (pcvStr !== '-' && pcvStr !== '') {
+                const pcv = parseInt(pcvStr);
+                // ค่าอ้างอิง PCV มาตรฐาน
+                const refs = {'วัว':[24,46],'ควาย':[24,46],'แพะ':[22,38],'แกะ':[22,38]}[anim.species] || [0,100];
+                if (pcv < refs[0]) { pcvStatusText = " (ต่ำ)"; pcvIssue = true; }
+                else if (pcv > refs[1]) { pcvStatusText = " (สูง)"; pcvIssue = true; }
+                else { pcvStatusText = " (ปกติ)"; }
+            }
+
+            // 🧠 2. ระบบช่วยแปรผลรวม (Interpretation)
+            let issues = [];
+            if (bloodStr !== 'Negative' && bloodStr !== '') issues.push(`พยาธิในเลือด (${bloodStr})`);
+            if (flotFlexStr !== 'Not Found' || sedFlexStr !== 'Not Found') issues.push('พยาธิทางเดินอาหาร');
+            if (rbStr === 'Positive') issues.push('Rose Bengal บวก (เฝ้าระวังแท้งติดต่อ)');
+            if (pcvIssue) issues.push(`PCV ผิดปกติ${pcvStatusText}`);
+
+            const interpretation = issues.length > 0 ? `พบปัญหา: ${issues.join(', ')}` : 'ปกติ (Normal)';
+
+            // 🌟 3. จัดแพ็คเตรียมยัดลง Google Sheet (อิงตามคอลัมน์เดิมเลยครับ)
+            if (sheet) {
+                rowsToInsert.push({
+                    'Timestamp': new Date().toLocaleString('th-TH'),
+                    'Staff_Name': staffName || 'ไม่ระบุ',
+                    'Camp_Date': date || '-',
+                    'Assigned_Line': line || '-',
+                    'Owner_Name': ownerName || '-',
+                    'Animal_ID': anim.animalNo || '-',
+                    'Species': anim.species || '-',
+                    'PCV': `${pcvStr}% ${pcvStatusText}`, // เซฟค่าพร้อมวงเล็บว่า สูง/ต่ำ/ปกติ
+                    'Blood_Smear': bloodStr,
+                    'Floatation': flotFlexStr,       // ยุบรวมเป็นก้อน เช่น Strongyle: 5/field, Coccidia: 2/field
+                    'Sedimentation': sedFlexStr,     // ยุบรวมเป็นก้อน
+                    'Rose_Bengal': rbStr,
+                    'Interpretation': interpretation
+                });
+            }
+
+            // 🎨 4. จัดเตรียม Flex Message การ์ดสีแดง (แสดงผลละเอียดยิบ)
+            const alertColor = issues.length > 0 ? "#dc2626" : "#16a34a";
+            const alertBg = issues.length > 0 ? "#fef2f2" : "#f0fdf4";
             
-            // 🩺 ลอจิกแปรผลแล็บสด: ตรวจสอบค่า PCV ตามชนิดสัตว์
-            if (d.labs.pcv) {
-                const pcvVal = parseInt(d.labs.pcv); 
-                const ref = LAB_REFERENCES.pcv[d.species];
-                if (ref) {
-                    if (pcvVal < ref[0]) interpretationArr.push(`🩸 PCV: ${pcvVal}% 🔴 [Low/Anemia]`);
-                    else if (pcvVal > ref[1]) interpretationArr.push(`🩸 PCV: ${pcvVal}% 🔴 [High/Dehydration]`);
-                    else interpretationArr.push(`🩸 PCV: ${pcvVal}% 🟢 [Normal]`);
-                }
-            }
-            
-            // ตรวจสอบพยาธิในเลือด
-            if (d.labs.bloodParasites && d.labs.bloodParasites.length > 0) {
-                if (d.labs.bloodParasites.includes("Negative")) interpretationArr.push(`🔬 Blood Smear: 🟢 Negative`);
-                else interpretationArr.push(`🔬 Blood Smear: 🔴 พบเชื้อ ${d.labs.bloodParasites.join(',')}`);
-            }
-            
-            // ตรวจสอบโรคบรูเซลโลซิส (Brucellosis)
-            if (d.labs.roseBengal) {
-                if (d.labs.roseBengal === "Positive") interpretationArr.push(`🧪 Rose Bengal: 🔴 Positive`);
-                else interpretationArr.push(`🧪 Rose Bengal: 🟢 Negative`);
-            }
+            labFlexContents.push(
+                { type: "box", layout: "horizontal", margin: "md", contents: [
+                    { type: "text", text: `ID: ${anim.animalNo}`, size: "sm", weight: "bold", color: "#00246B" },
+                    { type: "text", text: `(${anim.species})`, size: "xs", color: "#64748b", align: "end" }
+                ]},
+                { type: "text", text: `🩸 PCV: ${pcvStr}%${pcvStatusText}`, size: "xs", color: "#334155", wrap: true, weight: pcvIssue ? "bold" : "regular" },
+                { type: "text", text: `🔬 Blood: ${bloodStr}`, size: "xs", color: "#334155", wrap: true },
+                { type: "text", text: `💩 Flot: ${flotFlexStr}`, size: "xs", color: "#334155", wrap: true },
+                { type: "text", text: `💩 Sed: ${sedFlexStr}`, size: "xs", color: "#334155", wrap: true },
+                { type: "text", text: `🧪 Rose Bengal: ${rbStr}`, size: "xs", color: "#334155", wrap: true },
+                { type: "box", layout: "vertical", margin: "sm", paddingAll: "6px", backgroundColor: alertBg, cornerRadius: "6px", contents: [
+                    { type: "text", text: `💡 แปรผล: ${interpretation}`, size: "xs", weight: "bold", color: alertColor, wrap: true }
+                ]},
+                { type: "separator", margin: "md" }
+            );
+        });
 
-            const getEpg = (arr, name) => { const item = arr ? arr.find(p => p.name === name) : null; return item ? item.epg : ""; };
-            const getOtherFec = (arr) => {
-                const std = ['Strongyle', 'Trichuris', 'Coccidia', 'Capillaria'];
-                const item = arr ? arr.find(p => !std.includes(p.name) && p.name !== 'Negative' && p.name !== '') : null;
-                return item ? { name: item.name, epg: item.epg } : { name: "", epg: "" };
-            };
-
-            const flotOther = getOtherFec(d.labs.flotation); 
-            const sedOther = getOtherFec(d.labs.sedimentation);
-
-            // ตรวจสอบและเกรดไข่พยาธิวิธี Flotation / Sedimentation
-            if (d.labs.flotation && d.labs.flotation.length > 0) {
-                let items = d.labs.flotation.filter(p=>p.epg!=="").map(p => `🔴 ${p.name}(${p.epg} EPG->${LAB_REFERENCES.calculateFecScore(p.epg)})`);
-                if(items.length>0) interpretationArr.push(`💩 Floatation: ${items.join(', ')}`);
-            }
-            if (d.labs.sedimentation && d.labs.sedimentation.length > 0) {
-                let items = d.labs.sedimentation.filter(p=>p.epg!=="").map(p => `🔴 ${p.name}(${p.epg} EPG->${LAB_REFERENCES.calculateFecScore(p.epg)})`);
-                if(items.length>0) interpretationArr.push(`💩 Sedimentation: ${items.join(', ')}`);
-            }
-
-            const finalInterpretation = interpretationArr.join(' | ') || "🟢 ไม่พบสิ่งผิดปกติ";
-
-            // บันทึกผลแล็บสัตว์ลงชีทรายตัว
-            await labSheet.addRow({
-                Timestamp: new Date().toLocaleString('th-TH'), LINE_ID: payload.lineId, Staff: payload.staffName,
-                Date: payload.date, Line: payload.line, Owner_Name: payload.ownerName, Animal_No: d.animalNo, Species: d.species,
-                PCV: d.labs.pcv || "", Blood_Smear: (d.labs.bloodParasites || []).join(','),
-                Flotation_Strongyle: getEpg(d.labs.flotation, 'Strongyle'), Flotation_Trichuris: getEpg(d.labs.flotation, 'Trichuris'), Flotation_Coccidia: getEpg(d.labs.flotation, 'Coccidia'), Flotation_Capillaria: getEpg(d.labs.flotation, 'Capillaria'),
-                Flotation_Other_Name: flotOther.name, Flotation_Other_EPG: flotOther.epg,
-                Sedimentation_Strongyle: getEpg(d.labs.sedimentation, 'Strongyle'), Sedimentation_Trichuris: getEpg(d.labs.sedimentation, 'Trichuris'), Sedimentation_Coccidia: getEpg(d.labs.sedimentation, 'Coccidia'), Sedimentation_Capillaria: getEpg(d.labs.sedimentation, 'Capillaria'),
-                Sedimentation_Other_Name: sedOther.name, Sedimentation_Other_EPG: sedOther.epg,
-                Rose_Bengal: d.labs.roseBengal || "", Interpretation: finalInterpretation
-            });
-
-            // สร้างการ์ดจิ๋วสำหรับจัดใส่ Carousel สรุปผลแล็บ
-            carouselBubbles.push({
-                type: "bubble", size: "micro",
-                header: { type: "box", layout: "vertical", backgroundColor: finalInterpretation.includes('🔴') ? "#dc2626" : "#16a34a", contents: [{ type: "text", text: `เบอร์ ${d.animalNo}`, color: "#ffffff", weight: "bold", size: "sm" }] },
-                body: {
-                    type: "box", layout: "vertical", spacing: "xs",
-                    contents: [
-                        { type: "text", text: `Species: ${d.species} | Farm: ${payload.ownerName}`, size: "xxs", color: "#64748b", weight: "bold" },
-                        { type: "separator", margin: "sm" },
-                        { type: "text", text: finalInterpretation.replace(/ \| /g, '\n'), wrap: true, size: "xs", color: "#0f172a" }
-                    ]
-                }
-            });
+        // 🚀 สั่งเซฟลง Google Sheet ทีเดียว (Batch Insert ป้องกัน Google ล่ม)
+        if (sheet && rowsToInsert.length > 0) { 
+            await sheet.addRows(rowsToInsert); 
         }
 
-        if (carouselBubbles.length > 0) {
-            const limitedBubbles = carouselBubbles.slice(0, 12); 
-            const groupMsg = {
-                type: "flex", altText: `🔬 รายงานผลแล็บฟาร์มคุณ ${payload.ownerName} (${payload.animals.length} ตัว)`,
-                contents: { type: "carousel", contents: limitedBubbles }
+        // 📲 สั่งยิง Flex Message เข้า LINE (จะวิ่งตามหลังข้อความหัตถการไปติดๆ)
+        if (labFlexContents.length > 0) {
+            labFlexContents.pop(); // ลบเส้นคั่นอันสุดท้ายออกเพื่อความสวยงาม
+            const flexMsg = {
+                type: "flex", altText: `รายงานผลแล็บ ${line}`,
+                contents: {
+                    type: "bubble",
+                    header: { type: "box", layout: "vertical", backgroundColor: "#b91c1c", contents: [{ type: "text", text: `🔬 รายงานห้องปฏิบัติการ`, color: "#ffffff", weight: "bold", size: "md" }, { type: "text", text: `${line} | ฟาร์ม: ${ownerName}`, color: "#fecaca", size: "xs" }] },
+                    body: { type: "box", layout: "vertical", contents: labFlexContents },
+                    footer: { type: "box", layout: "vertical", contents: [{ type: "text", text: `ผู้บันทึก: หมอ${staffName}`, size: "xxs", color: "#94a3b8", align: "end" }] }
+                }
             };
-
-            // 🌟 ยิงตรงส่งรายงานแล็บเข้า LINE OA ส่วนตัวของคนกรอกเพื่อบันทึกประวัติ
-            if (payload.lineId && payload.lineId !== "TEST_ENV") {
-                await sendDirectLinePush(payload.lineId, [groupMsg]);
-            }
             
-            // ส่งรายงานเข้าไลน์กลุ่มปศุสัตว์หลักเพื่อให้ทีมร่วมรับทราบ
+            try { if(lineId && lineId !== "TEST_ENV") await client.pushMessage({ to: lineId, messages: [flexMsg] }); } catch(e) {}
             const groupId = process.env.LINE_GROUP_ID;
-            if (groupId) { 
-                await sendDirectLinePush(groupId, [groupMsg]);
-            }
+            if (groupId) { try { await client.pushMessage({ to: groupId, messages: [flexMsg] }); } catch(e) {} }
         }
-        res.sendStatus(200);
-    } catch (err) { 
-        console.error(err); 
-        res.status(500).send(err.message); 
+
+        res.json({ success: true });
+    } catch (e) {
+        console.error("Lab Save Error:", e);
+        res.status(500).json({ success: false });
     }
 });
 
