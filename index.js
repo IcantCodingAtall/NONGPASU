@@ -205,13 +205,6 @@ app.post('/api/presence', (req, res) => {
     res.json(Object.values(activeUsers));
 });
 
-// 2. API แดชบอร์ดสรุปยอด: ดึงข้อมูลจากกูเกิ้ลชีททั้งหมดมาแปรผล ยอดสัตว์, ยอดหัตถการ, ยอดแล็บป่วย
-// ==========================================
-// 📊 API 4: ดึงข้อมูล Dashboard (ซ่อมบัคหน่วย Undefined + ตัดยอดค้างเมื่อคืนแล้ว)
-// ==========================================
-// ==========================================
-// 📊 API 4: ดึงข้อมูล Dashboard (ล้างบัคเว้นวรรค + คำนวณค้างเบิกเป๊ะ 100%)
-// ==========================================
 app.get('/api/dashboard', async (req, res) => {
     try {
         const doc = await getSheetDoc();
@@ -219,64 +212,61 @@ app.get('/api/dashboard', async (req, res) => {
         const pLogSheet = doc.sheetsByTitle['Log_Procedures'] || doc.sheetsByTitle['Procedure_Log'];
         const pRows = pLogSheet ? await pLogSheet.getRows() : [];
         let animals = { 'วัว': 0, 'ควาย': 0, 'แพะ': 0, 'แกะ': 0 };
-        let procedures = { 'FMD': 0, 'LSD': 0, 'EDTA_tube': 0, 'Clot_tube': 0, 'Ivermectin': 0, 'Albendazole': 0, 'Chloramine': 0, 'DexamVet': 0, 'VitaminB': 0 };
+        // 🌟 เพิ่ม Feces เข้ามาและปรับชื่อให้เป๊ะ
+        let procedures = { 'FMD': 0, 'LSD': 0, 'EDTA_Tube': 0, 'Clot_Tube': 0, 'Feces': 0, 'Ivermectin': 0, 'Albendazole': 0, 'Chloramine': 0, 'DexamVet': 0, 'VitaminB': 0 };
+
+        // ฟังก์ชันช่วยดึงค่า ป้องกันพิมพ์เล็กพิมพ์ใหญ่ผิด
+        const getVal = (row, ...keys) => {
+            for(let k of keys) { if(row.get(k) !== undefined && row.get(k) !== null) return parseInt(row.get(k)) || 0; }
+            return 0;
+        };
 
         pRows.forEach(r => {
-            animals['วัว'] += (parseInt(r.get('Cow')) || 0);
-            animals['ควาย'] += (parseInt(r.get('Buffalo')) || 0);
-            animals['แพะ'] += (parseInt(r.get('Goat')) || 0);
-            animals['แกะ'] += (parseInt(r.get('Sheep')) || 0);
+            animals['วัว'] += getVal(r, 'Cow', 'วัว');
+            animals['ควาย'] += getVal(r, 'Buffalo', 'Buff', 'ควาย');
+            animals['แพะ'] += getVal(r, 'Goat', 'แพะ');
+            animals['แกะ'] += getVal(r, 'Sheep', 'แกะ');
 
-            for (let key in procedures) {
-                let sheetKey = key;
-                if(key === 'EDTA_tube') sheetKey = 'EDTA_Tube';
-                if(key === 'Clot_tube') sheetKey = 'Clot_Tube';
-                if(key === 'Ivermectin') sheetKey = 'Iver';
-                if(key === 'Albendazole') sheetKey = 'Alben';
-                if(key === 'VitaminB') sheetKey = 'VitaminB';
-                procedures[key] += (parseInt(r.get(sheetKey)) || 0);
-            }
+            procedures['FMD'] += getVal(r, 'FMD');
+            procedures['LSD'] += getVal(r, 'LSD');
+            procedures['EDTA_Tube'] += getVal(r, 'EDTA_Tube', 'EDTA', 'EDTA_tube');
+            procedures['Clot_Tube'] += getVal(r, 'Clot_Tube', 'Clot', 'Clot_tube');
+            procedures['Feces'] += getVal(r, 'Feces');
+            procedures['Ivermectin'] += getVal(r, 'Ivermectin', 'Iver');
+            procedures['Albendazole'] += getVal(r, 'Albendazole', 'Alben');
+            procedures['VitaminB'] += getVal(r, 'VitaminB', 'VitB');
+            procedures['Chloramine'] += getVal(r, 'Chloramine', 'Chloro');
+            procedures['DexamVet'] += getVal(r, 'DexamVet', 'Dexam');
         });
 
         const invSheet = doc.sheetsByTitle['Inventory'];
         const invRows = invSheet ? await invSheet.getRows() : [];
         let unitMap = {};
         invRows.forEach(r => {
-            const itemName = (r.get('รายการ') || '').trim(); // 🚨 เพิ่ม .trim()
+            const itemName = (r.get('รายการ') || '').trim();
             const unit = (r.get('Unit') || '').trim() || 'ชิ้น';
             if(itemName) unitMap[itemName] = unit;
         });
 
-        // 🌟 คำนวณค้างเบิกด้วยคณิตศาสตร์ (เอาเบิกทั้งหมด ลบด้วย คืนทั้งหมด ป้องกันบัค Status)
         const takeoutSheet = doc.sheetsByTitle['Log_Takeout'];
         const returnSheet = doc.sheetsByTitle['Log_Return'];
-        
         const tRows = takeoutSheet ? await takeoutSheet.getRows() : [];
         const rRows = returnSheet ? await returnSheet.getRows() : [];
 
         let lineItemsTrack = {};
-
         tRows.forEach(r => {
-            const line = r.get('Camp_Line');
-            const date = r.get('Camp_Date');
-            const name = (r.get('Item_Name') || '').trim(); // 🚨 เพิ่ม .trim()
-            const qty = parseInt(r.get('Amount_Taken')) || 0;
-            const staff = r.get('Staff') || "ผู้ปฏิบัติงาน";
-            const unit = unitMap[name] || 'ชิ้น'; 
-
+            if (r.get('Status') === 'คืนแล้ว') return; 
+            const line = r.get('Camp_Line'); const date = r.get('Camp_Date'); const name = (r.get('Item_Name') || '').trim();
+            const qty = parseInt(r.get('Amount_Taken')) || 0; const staff = r.get('Staff') || "ผู้ปฏิบัติงาน"; const unit = unitMap[name] || 'ชิ้น'; 
             if (qty > 0 && line && date) {
                 const key = `${line}_${date}_${name}`;
                 if (!lineItemsTrack[key]) lineItemsTrack[key] = { line, date, name, qty: 0, staff, unit }; 
                 lineItemsTrack[key].qty += qty;
             }
         });
-
         rRows.forEach(r => {
-            const line = r.get('Camp_Line');
-            const date = r.get('Camp_Date');
-            const name = (r.get('Item_Name') || '').trim(); // 🚨 เพิ่ม .trim()
+            const line = r.get('Camp_Line'); const date = r.get('Camp_Date'); const name = (r.get('Item_Name') || '').trim();
             const qty = parseInt(r.get('Amount_Returned')) || 0;
-
             if (qty > 0 && line && date) {
                 const key = `${line}_${date}_${name}`;
                 if (lineItemsTrack[key]) lineItemsTrack[key].qty -= qty; 
@@ -285,7 +275,6 @@ app.get('/api/dashboard', async (req, res) => {
 
         let activeBorrowsGrouped = {};
         Object.values(lineItemsTrack).forEach(item => {
-            // 🚨 ถ้าหักลบแล้วเหลือ 0 จะหายไปจาก Dashboard อัตโนมัติ!
             if (item.qty > 0) { 
                 const mapKey = `${item.line}_${item.date}`;
                 if (!activeBorrowsGrouped[mapKey]) activeBorrowsGrouped[mapKey] = { line: item.line, date: item.date, name: item.staff, totalQty: 0, items: [] };
@@ -294,13 +283,8 @@ app.get('/api/dashboard', async (req, res) => {
             }
         });
 
-        res.json({
-            animals, procedures, activeBorrows: Object.values(activeBorrowsGrouped), abnormalLabs: [] 
-        });
-    } catch (e) { 
-        console.error("Dashboard Fetch Error:", e);
-        res.status(500).json({ success: false }); 
-    }
+        res.json({ animals, procedures, activeBorrows: Object.values(activeBorrowsGrouped), abnormalLabs: [] });
+    } catch (e) { res.status(500).json({ success: false }); }
 });
             // ==========================================
 
@@ -1219,59 +1203,60 @@ app.post('/webhook', express.json(), async (req, res) => {
 
             // 🏁 2. ระบบเคลียร์งานปิดฟาร์มประจำวัน (#เลิกสาย)
             // หาคำสั่งปิดสาย เลิกสาย ในระบบวนลูป Webhook ของพี่ แล้ววางตัวนี้ทับเลยครับ
-if (text.match(/^#\s*เลิกสาย/)) {
-    console.log("👉 เข้าสู่กระบวนการ #เลิกสาย...");
-    const praiseText = text.replace(/^#\s*เลิกสาย\s*/, '').trim();
-    const sender = rows.find(r => r.get('LINE_UID') === userId);
-    if (!sender) continue;
+// 🏁 2. ระบบเคลียร์งานปิดฟาร์มประจำวัน (#เลิกสาย)
+            if (text.match(/^#\s*เลิกสาย/)) {
+                console.log("👉 เข้าสู่กระบวนการ #เลิกสาย...");
+                const praiseText = text.replace(/^#\s*เลิกสาย\s*/, '').trim();
+                const sender = rows.find(r => r.get('LINE_UID') === userId);
+                if (!sender) continue;
 
-    const role = sender.get('Role') ? sender.get('Role').trim() : '';
-    if (role !== 'ผู้นำสาย' && role !== 'หัวหน้า') {
-        await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ เฉพาะผู้นำสายเท่านั้นที่ทำรายการเลิกสายได้ครับ" }] });
-        continue;
-    }
+                const role = sender.get('Role') ? sender.get('Role').trim() : '';
+                if (role !== 'ผู้นำสาย' && role !== 'หัวหน้า') {
+                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: "❌ เฉพาะผู้นำสายเท่านั้นที่ทำรายการเลิกสายได้ครับ" }] });
+                    continue;
+                }
 
-    const myLine = sender.get('Assigned_Line');
-    const myDate = sender.get('Camp_Date');
+                const myLine = sender.get('Assigned_Line');
+                const myDate = sender.get('Camp_Date');
 
-    // 🎨 แปลงร่างข้อความประกาศเลิกสายให้กลายเป็น Flex Message พรีเมียมสะใจ (ตามข้อ 8)
-    const flexFinish = {
-        type: "flex", altText: `🎉 ${myLine} ปฏิบัติภารกิจเสร็จสิ้นเรียบร้อยแล้ว!`,
-        contents: {
-            type: "bubble",
-            header: { type: "box", layout: "vertical", backgroundColor: "#10B981", contents: [{ type: "text", text: "🎉 MISSION COMPLETED", color: "#ffffff", weight: "bold", size: "xs" }, { type: "text", text: `${myLine} เลิกสายเรียบร้อย`, color: "#ffffff", weight: "bold", size: "lg", margin: "xs" }] },
-            body: {
-                type: "box", layout: "vertical",
-                contents: [
-                    { type: "text", text: `📅 ประจำวันที่: ${myDate}`, size: "xs", color: "#64748b" },
-                    { type: "text", text: `💬 ข้อความจากผู้นำสาย (หมอ${sender.get('Nickname')}):`, weight: "bold", size: "sm", color: "#00246B", margin: "md" },
-                    { type: "text", text: praiseText || "ขอบคุณคุณหมอทุกคนในสายที่ร่วมแรงร่วมใจเหนื่อยปฏิบัติภารกิจค่ายในวันนี้ด้วยกันครับ พักผ่อนให้เต็มที่ครับ!", wrap: true, size: "sm", color: "#334155", style: "italic", margin: "xs" }
-                ]
+                // 🌟 ระบบตรวจเช็คลิสต์แบบขั้นเด็ดขาด (ต้องครบ 10 ข้อ)
+                const checkSheet = doc.sheetsByTitle['Checklist_Status'];
+                const cRows = checkSheet ? await checkSheet.getRows() : [];
+                // นับจำนวนข้อที่ติ๊กไปแล้ว
+                const checkedCount = cRows.filter(r => r.get('Camp_Date') === myDate && r.get('Assigned_Line') === myLine && r.get('Status') === 'Checked').length;
+                const totalTasksRequired = 10; // 🎯 กำหนดเลยว่ามีเช็คลิสต์ 10 ข้อ
+
+                if (checkedCount < totalTasksRequired) {
+                    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `❌ ยังเลิกสายไม่ได้ครับ! ตรวจพบว่าทำเช็คลิสต์ไปเพียง ${checkedCount}/${totalTasksRequired} รายการ กรุณาเข้าไปติ๊กในหน้าเว็บให้ครบก่อนครับ` }] });
+                    continue;
+                }
+
+                // ปรับสถานะใน Google ชีท
+                const mSheet = doc.sheetsByTitle['Missions_Data'];
+                if (mSheet) {
+                    const mRows = await mSheet.getRows();
+                    const missionRow = mRows.find(r => r.get('Camp_Date') === myDate && r.get('Assigned_Line') === myLine);
+                    if (missionRow) { missionRow.assign({ 'Line_Status': 'เลิกสายเรียบร้อย' }); await missionRow.save(); }
+                }
+
+                const flexFinish = {
+                    type: "flex", altText: `🎉 ${myLine} ปฏิบัติภารกิจเสร็จสิ้นเรียบร้อยแล้ว!`,
+                    contents: {
+                        type: "bubble",
+                        header: { type: "box", layout: "vertical", backgroundColor: "#10B981", contents: [{ type: "text", text: "🎉 MISSION COMPLETED", color: "#ffffff", weight: "bold", size: "xs" }, { type: "text", text: `${myLine} เลิกสายเรียบร้อย`, color: "#ffffff", weight: "bold", size: "lg", margin: "xs" }] },
+                        body: { type: "box", layout: "vertical", contents: [{ type: "text", text: `📅 ประจำวันที่: ${myDate}`, size: "xs", color: "#64748b" }, { type: "text", text: `💬 ข้อความจากผู้นำสาย (หมอ${sender.get('Nickname')}):`, weight: "bold", size: "sm", color: "#00246B", margin: "md" }, { type: "text", text: praiseText || "ขอบคุณคุณหมอทุกคนในสายที่ร่วมแรงร่วมใจกันครับ พักผ่อนให้เต็มที่!", wrap: true, size: "sm", color: "#334155", style: "italic", margin: "xs" }] }
+                    }
+                };
+
+                const targets = rows.filter(r => r.get('Assigned_Line') === myLine && r.get('Camp_Date') === myDate && r.get('LINE_UID'));
+                for (let t of targets) { try { await client.pushMessage({ to: t.get('LINE_UID'), messages: [flexFinish] }); } catch(err) {} }
+
+                const groupId = process.env.LINE_GROUP_ID;
+                if (groupId) { try { await client.pushMessage({ to: groupId, messages: [flexFinish] }); } catch(e) {} }
+
+                await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `✅ ระบบส่งการแจ้งเตือนเลิกสายให้สมาชิก ${myLine} เรียบร้อยแล้วครับ!` }] });
+                continue;
             }
-        }
-    };
-
-    // ปรับสถานะใน Google ชีท
-    const mSheet = doc.sheetsByTitle['Missions_Data'];
-    if (mSheet) {
-        const mRows = await mSheet.getRows();
-        const missionRow = mRows.find(r => r.get('Camp_Date') === myDate && r.get('Assigned_Line') === myLine);
-        if (missionRow) { missionRow.assign({ 'Line_Status': 'เลิกสายเรียบร้อย' }); await missionRow.save(); }
-    }
-
-    // ยิงเข้าแชทส่วนตัวสมาชิกทุกคนในสาย
-    const targets = rows.filter(r => r.get('Assigned_Line') === myLine && r.get('Camp_Date') === myDate && r.get('LINE_UID'));
-    for (let t of targets) {
-        try { await client.pushMessage({ to: t.get('LINE_UID'), messages: [flexFinish] }); } catch(err) {}
-    }
-
-    // 🌟 ยิงประกาศจบงานเด้งเข้าแชทกลุ่มไลน์กลางด้วยทันที
-    const groupId = process.env.LINE_GROUP_ID;
-    if (groupId) { try { await client.pushMessage({ to: groupId, messages: [flexFinish] }); } catch(e) {} }
-
-    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: `✅ บอบส่งการแจ้งเตือนเลิกสายพรีเมียมให้สมาชิก ${myLine} เรียบร้อยแล้วครับ!` }] });
-    continue;
-}
 
             // 📤📥 3. 🎯 ระบบดักรับข้อความพิมพ์ #เบิกของรวม และ #คืนของรวม (อัปเดตเพิ่มระบบตัดสต๊อก Real-time)
             if (text.startsWith('#เบิกของรวม') || text.startsWith('#คืนของรวม')) {
@@ -1641,6 +1626,7 @@ app.get('/api/all-missions', async (req, res) => {
             });
 
             // 🌟 ลูปดึงโครงสร้าง 4 สถานที่ปฏิบัติงาน
+            // 🌟 ลูปดึงโครงสร้าง 4 สถานที่ปฏิบัติงาน (ดึงรูปรถแยกมาด้วย)
             let locationsList = [];
             if (mData) {
                 for (let i = 1; i <= 4; i++) {
@@ -1651,7 +1637,8 @@ app.get('/api/all-missions', async (req, res) => {
                             count: mData.get(`Animal_Count_${i}`) || "-",
                             detail: mData.get(`Task_Details_${i}`) || "-",
                             phone: mData.get(`Owner_Phone_${i}`) || "-",
-                            mapUrl: mData.get(`Maps_${i}`) || ""
+                            mapUrl: mData.get(`Maps_${i}`) || "",
+                            image: mData.get(`Image_URL_${i}`) || "https://images.unsplash.com/photo-1595083162795-0e698888b15d?w=500&q=80" // ดึงรูปแยก!
                         });
                     }
                 }

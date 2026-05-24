@@ -427,7 +427,7 @@
 
                 // หัตถการ (เช็คป้องกันเว็บพังเช่นกัน)
                 const p = data.procedures || {};
-                const mapIds = { 'FMD':'stat-fmd', 'LSD':'stat-lsd', 'EDTA_tube':'stat-edta', 'Clot_tube':'stat-clot', 'Ivermectin':'stat-iver', 'Albendazole':'stat-alben', 'Chloramine':'stat-chloro', 'DexamVet':'stat-dexam', 'VitaminB':'stat-vitb' };
+                const mapIds = { 'FMD':'stat-fmd', 'LSD':'stat-lsd', 'EDTA_Tube':'stat-edta', 'Clot_Tube':'stat-clot', 'Feces':'stat-feces', 'Ivermectin':'stat-iver', 'Albendazole':'stat-alben', 'Chloramine':'stat-chloro', 'DexamVet':'stat-dexam', 'VitaminB':'stat-vitb' };
                 for(let key in mapIds) { 
                     const el = document.getElementById(mapIds[key]);
                     if(el) el.innerText = p[key] || 0; 
@@ -574,68 +574,62 @@
         }
 
         async function selectTeamMission(index) {
-    const targetData = currentFetchedMissions[index];
-    if(!targetData) return;
+            const targetData = currentFetchedMissions[index];
+            if(!targetData) return;
 
-    document.getElementById('active-teams-main').classList.add('hidden');
-    document.getElementById('selected-mission-wrapper').classList.remove('hidden');
+            document.getElementById('active-teams-main').classList.add('hidden');
+            document.getElementById('selected-mission-wrapper').classList.remove('hidden');
 
-    const isMyTeam = (targetData.line === userProfile.assignedLine);
-    const badge = document.getElementById('target-line-badge');
-    if(isMyTeam) badge.classList.remove('hidden'); else badge.classList.add('hidden');
+            const isMyTeam = (targetData.line === userProfile.assignedLine);
+            const badge = document.getElementById('target-line-badge');
+            if(isMyTeam) badge.classList.remove('hidden'); else badge.classList.add('hidden');
 
-    document.getElementById('target-line-title').innerText = `${targetData.line}`;
-    
-    // 🌟 แก้ไขฟีเจอร์ข้อ 1 & 2: สร้างการ์ดแสดงผลสถานที่ออกค่ายแบบรายจุด (สูงสุด 4 ที่)
-    let placesHtml = '';
-    if (targetData.locations && targetData.locations.length > 0) {
-        targetData.locations.forEach((loc, idx) => {
-            // สร้างปุ่มลิงก์แผนที่กูเกิ้ลแมพแบบไดนามิก
-            const mapButton = loc.mapUrl 
-                ? `<a href="${loc.mapUrl}" target="_blank" class="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded-md font-bold inline-flex items-center gap-1"><i class="fa-solid fa-location-arrow"></i> เปิดแผนที่ Maps</a>`
-                : `<span class="text-[9px] text-slate-400 italic">ไม่มีพิกัดแนบ</span>`;
+            document.getElementById('target-line-title').innerText = `${targetData.line}`;
+            
+            // 🌟 สร้างการ์ดแสดงผลสถานที่แบบแยกกล่องแยกรุป 100%
+            let placesHtml = '';
+            if (targetData.locations && targetData.locations.length > 0) {
+                targetData.locations.forEach((loc, idx) => {
+                    const mapButton = loc.mapUrl 
+                        ? `<a href="${loc.mapUrl}" target="_blank" class="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded-md font-bold inline-flex items-center gap-1"><i class="fa-solid fa-location-arrow"></i> แผนที่</a>`
+                        : `<span class="text-[9px] text-slate-400 italic">ไม่มีพิกัด</span>`;
 
-            // สร้างปุ่มกดโทรศัพท์เบอร์ติดต่อเจ้าของฟาร์ม
-            const phoneButton = (loc.phone && loc.phone !== "-")
-                ? `<a href="tel:${loc.phone}" class="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded-md font-bold inline-flex items-center gap-1"><i class="fa-solid fa-phone"></i> โทร: ${loc.phone}</a>`
-                : `<span class="text-[9px] text-slate-400 italic">ไม่มีเบอร์โทร</span>`;
+                    const phoneButton = (loc.phone && loc.phone !== "-")
+                        ? `<a href="tel:${loc.phone}" class="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded-md font-bold inline-flex items-center gap-1"><i class="fa-solid fa-phone"></i> โทร: ${loc.phone}</a>`
+                        : ``;
 
-            placesHtml += `
-            <div class="mb-3 p-3 bg-white/10 rounded-xl border border-white/10 backdrop-blur-sm">
-                <div class="flex justify-between items-start mb-1.5">
-                    <h5 class="text-xs font-bold text-[#F8B500]">📍 จุดปฏิบัติงานที่ ${idx+1}: ${loc.place}</h5>
-                </div>
-                <p class="text-[11px] text-blue-50/90 mb-1"><i class="fa-solid fa-cow text-[#F8B500] w-4"></i> ยอดสัตว์: ${loc.count} ตัว | 📝 งาน: ${loc.detail}</p>
-                <div class="flex items-center gap-2 mt-2 pt-1.5 border-t border-white/5">
-                    ${mapButton} ${phoneButton}
-                </div>
-            </div>`;
-        });
-    } else {
-        placesHtml = `<p class="text-xs text-blue-100 italic py-2">ยังไม่มีการลงทะเบียนแผนสถานที่ปฏิบัติงาน</p>`;
-    }
-    
-    // ยัดข้อมูลการ์ดสถานที่ลงส่วนหัว
-    document.getElementById('target-line-location').innerHTML = placesHtml;
-    
-    // ซ่อนข้อมูลเก่าๆ ที่เป็นข้อความสรุปเดี่ยวทิ้งไปเลย ปรับความกระชับ
-    document.getElementById('target-line-count').style.display = 'none';
-    document.getElementById('target-line-detail').style.display = 'none';
-    
-    document.getElementById('target-line-img').src = targetData.image || "https://images.unsplash.com/photo-1595083162795-0e698888b15d?w=500&q=80&auto=format&fit=crop";
+                    placesHtml += `
+                    <div class="mb-4 bg-white rounded-xl shadow-md border border-slate-100 overflow-hidden">
+                        <img src="${loc.image}" class="w-full h-24 object-cover bg-slate-200">
+                        <div class="p-3">
+                            <h5 class="text-xs font-bold text-[#00246B] mb-2">📍 จุดที่ ${idx+1}: ${loc.place}</h5>
+                            <p class="text-[11px] text-slate-600 mb-1"><i class="fa-solid fa-cow text-[#F8B500] w-4"></i> สัตว์: <span class="font-bold text-[#00246B]">${loc.count} ตัว</span></p>
+                            <p class="text-[11px] text-slate-600 mb-2"><i class="fa-solid fa-clipboard-list text-[#F8B500] w-4"></i> งาน: ${loc.detail}</p>
+                            <div class="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100">
+                                ${mapButton} ${phoneButton}
+                            </div>
+                        </div>
+                    </div>`;
+                });
+            } else {
+                placesHtml = `<div class="bg-white p-4 rounded-xl text-center"><p class="text-xs text-slate-400 italic">ยังไม่มีการลงทะเบียนสถานที่</p></div>`;
+            }
+            
+            // ยัดข้อมูลการ์ดสถานที่ลงแทนที่ข้อมูลเดิม
+            document.getElementById('target-line-location').innerHTML = placesHtml;
+            document.getElementById('target-line-count').style.display = 'none';
+            document.getElementById('target-line-detail').style.display = 'none';
+            document.getElementById('target-line-img').style.display = 'none'; // ปิดรูปใหญ่ทิ้งไปเลย
 
-    // ส่วนประมวลรายชื่อผู้ปฏิบัติงานและการดึงเช็คลิสต์ประจำวันปล่อยโค้ดเดิมทำงานปกติ...
-    let memHtml = '';
-    if (targetData.leader) {
-        memHtml += `<div class="flex justify-between items-center bg-amber-50 p-2 rounded-lg border border-amber-100 mb-1"><span class="font-bold text-amber-700">👑 ${targetData.leader.name} (ปี ${targetData.leader.year})</span><span class="text-[9px] bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded font-bold">ผู้นำสาย</span></div>`;
-    }
-    if (targetData.members && targetData.members.length > 0) {
-        targetData.members.forEach(m => {
-            memHtml += `<div class="flex justify-between items-center p-2 border-b border-slate-50 border-dashed last:border-0"><span class="text-slate-600 font-medium">👤 ${m.name} (ปี ${m.year})</span><span class="text-[9px] text-slate-400">ผู้ปฏิบัติงาน</span></div>`;
-        });
-    } else {
-        memHtml += `<p class="text-center text-slate-400 italic text-[10px] py-2">-- ข้อมูลรายชื่อผู้ปฏิบัติงานในสาย --</p>`;
-    }
+            // จัดการรายชื่อ
+            let memHtml = '';
+            if (targetData.leader) {
+                memHtml += `<div class="flex justify-between items-center bg-amber-50 p-2 rounded-lg border border-amber-100 mb-1"><span class="font-bold text-amber-700">👑 ${targetData.leader.name} (ปี ${targetData.leader.year})</span><span class="text-[9px] bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded font-bold">ผู้นำสาย</span></div>`;
+            }
+            if (targetData.members && targetData.members.length > 0) {
+                targetData.members.forEach(m => { memHtml += `<div class="flex justify-between items-center p-2 border-b border-slate-50 border-dashed last:border-0"><span class="text-slate-600 font-medium">👤 ${m.name} (ปี ${m.year})</span><span class="text-[9px] text-slate-400">ผู้ปฏิบัติงาน</span></div>`; });
+            } else { memHtml += `<p class="text-center text-slate-400 italic text-[10px] py-2">-- ไม่มีสมาชิก --</p>`; }
+            document.getElementById('target-line-members').innerHTML = memHtml;
     document.getElementById('target-line-members').innerHTML = memHtml;
     
     const zone = document.getElementById('checklist-render-zone');
@@ -1112,6 +1106,7 @@
         }
 
         // 🌟 อัปเดตระบบส่งข้อมูล ยัดตัวแปรครบถ้วนตรงเป๊ะตามเซิร์ฟเวอร์ต้องการ
+        // 🌟 อัปเดตระบบส่งข้อมูล แก้บัค Line ID ให้เด้ง Flex ได้เป๊ะ!
         async function submitLogbook(btnObj) {
             btnObj.innerText = "กำลังส่ง..."; btnObj.disabled = true;
             const owner = document.getElementById('g-owner-name').value;
@@ -1122,10 +1117,9 @@
             const v = id => parseInt(document.getElementById(id).value)||0;
             const othersText = document.getElementById('h-others').value || "";
 
-            // เช็คว่ามีการทำรายการหัตถการหรือกรอกยาบ้างไหม
             if((v('c-cow')+v('c-buff')+v('c-goat')+v('c-sheep')+v('h-fmd')+v('h-lsd')+v('h-edta')+v('h-clot')+v('h-feces')+v('h-iver')+v('h-alben')+v('h-chloro')+v('h-dexam')+v('h-vitb')) > 0 || othersText !== "") {
                 const payloadProc = {
-                    lineId: userProfile.lineId, 
+                    lineId: myLineId, // 🚨 ซ่อมแล้ว! ใช้ myLineId แทนตัวแปรพัง
                     staffName: userProfile.nickname, 
                     date: userProfile.campDate, 
                     line: userProfile.assignedLine, 
@@ -1149,7 +1143,7 @@
             });
 
             if(labAnimalsList.length > 0) {
-                promises.push(fetch('/api/liff/lab', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ lineId: userProfile.lineId, staffName: userProfile.nickname, date: userProfile.campDate, line: userProfile.assignedLine, ownerName: owner, animals: labAnimalsList }) }));
+                promises.push(fetch('/api/liff/lab', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ lineId: myLineId, staffName: userProfile.nickname, date: userProfile.campDate, line: userProfile.assignedLine, ownerName: owner, animals: labAnimalsList }) }));
             }
 
             try {
