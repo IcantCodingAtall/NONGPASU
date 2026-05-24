@@ -293,62 +293,130 @@ app.get('/api/dashboard', async (req, res) => {
 // ============================================================================
 
 // 1. ท่อรับข้อมูลหัตถการจากฟอร์มพอร์ทัล -> ยิงบันทึกคอลัมน์กูเกิ้ลชีท -> ยิงการ์ดน้ำเงินเข้าไลน์กลุ่ม
-app.post('/api/liff/procedure', async (req, res) => {
+// ==========================================
+// 📝 API 3: บันทึกหัตถการ (ซ่อมบัค Flex Message แครช และตรวจสอบข้อมูล)
+// ==========================================
+// ==========================================
+// 📝 API 3: บันทึกหัตถการ (ซ่อมบัค Flex Message แครช และตรวจสอบข้อมูล)
+// ==========================================
+app.post('/api/liff/procedure', express.json(), async (req, res) => {
     try {
-        const d = req.body;
-        // อัปเดตสถานะการใช้งาน Live Radar หน้า Dashboard
-        activeUsers[d.lineId] = { name: d.staffName, status: "✅ ส่งยอดหัตถการสำเร็จ!", lastSeen: Date.now() };
+        const cleanNum = (v) => parseInt(v) || 0;
+        const cleanStr = (v, def) => (v === undefined || v === null || String(v).trim() === '' || String(v).trim() === 'undefined') ? def : String(v).trim();
+
+        const lineId = req.body.lineId;
+        const staffName = cleanStr(req.body.staffName, 'ผู้ปฏิบัติงาน');
+        const date = cleanStr(req.body.date, '-');
+        const line = cleanStr(req.body.line, '-');
+        const ownerName = cleanStr(req.body.ownerName, 'ไม่ระบุ');
+        const ownerPhone = cleanStr(req.body.ownerPhone, '-');
+        const ownerAddress = cleanStr(req.body.ownerAddress, '-');
         
-        const doc = await getSheetDoc(); 
-        const procSheet = doc.sheetsByTitle['Log_Procedures'];
+        const cows = cleanNum(req.body.cows || req.body.cow);
+        const buffs = cleanNum(req.body.buffs || req.body.buff || req.body.buffalo);
+        const goats = cleanNum(req.body.goats || req.body.goat);
+        const sheeps = cleanNum(req.body.sheeps || req.body.sheep);
+        const fmd = cleanNum(req.body.fmd);
+        const lsd = cleanNum(req.body.lsd);
         
-        const totalAnimals = parseInt(d.cows||0) + parseInt(d.buffs||0) + parseInt(d.goats||0) + parseInt(d.sheeps||0);
-        const speciesBreakdown = `วัว:${d.cows||0}, ควาย:${d.buffs||0}, แพะ:${d.goats||0}, แกะ:${d.sheeps||0}`;
+        // 🌟 ดึงข้อมูล EDTA, Clot, Feces
+        const edta = cleanNum(req.body.edta); 
+        const clot = cleanNum(req.body.clot); 
+        const feces = cleanNum(req.body.feces);
+        
+        const iver = cleanNum(req.body.iver);
+        const alben = cleanNum(req.body.alben);
+        const chloro = cleanNum(req.body.chloro);
+        const dexam = cleanNum(req.body.dexam);
+        const vitb = cleanNum(req.body.vitb); 
 
-        // บันทึกข้อมูลลง Google Sheets
-        // ใน app.post('/api/liff/procedure' ...
-        await procSheet.addRow({
-            'Timestamp': new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }),
-            'LINE_ID': req.body.lineId,
-            'Staff': req.body.staffName,
-            'Date': req.body.date,
-            'Line': req.body.line,
-            'Owner_Name': req.body.ownerName,
-            'Owner_Phone': req.body.ownerPhone,
-            'Address': req.body.ownerAddress,
-            // จำนวนสัตว์
-            'Cow': req.body.cows,
-            'Buffalo': req.body.buffs,
-            'Goat': req.body.goats,
-            'Sheep': req.body.sheeps,
-            // หัตถการและเวชภัณฑ์ (อัปเดตให้ครบตามหน้าเว็บใหม่)
-            'FMD': req.body.fmd,
-            'LSD': req.body.lsd,
-            'EDTA_tube': req.body.edta,
-            'Clot_tube': req.body.clot,
-            'Ivermectin': req.body.iver,
-            'Albendazole': req.body.alben,
-            'Chloramine': req.body.chloro,
-            'DexamVet': req.body.dexam,
-            'VitaminB': req.body.vitb
-        });
+        // พิมพ์เช็คใน Log (ถ้าของไม่เข้า ไปดูใน Log ของ Render ได้เลยว่าหน้าเว็บส่งมาไหม)
+        console.log(`📥 [Logbook] บันทึกสาย ${line} | EDTA:${edta} Clot:${clot} Feces:${feces}`);
 
+        const doc = await getSheetDoc();
+        const sheet = doc.sheetsByTitle['Log_Procedures'] || doc.sheetsByTitle['Procedure_Log'];
+        
+        // 🌟 บันทึกลง Google Sheet
+        if (sheet) {
+            await sheet.addRow({ 
+                'Timestamp': new Date().toLocaleString('th-TH'), 
+                'Staff_Name': staffName, 
+                'Camp_Date': date, 
+                'Assigned_Line': line, 
+                'Owner_Name': ownerName, 
+                'Owner_Phone': ownerPhone,
+                'Owner_Address': ownerAddress,
+                'Cow': cows, 
+                'Buffalo': buffs, 
+                'Goat': goats, 
+                'Sheep': sheeps, 
+                'EDTA_Tube': edta, 
+                'Clot_Tube': clot, 
+                'Feces': feces,
+                'FMD': fmd, 
+                'LSD': lsd, 
+                'Ivermectin': iver, 
+                'Albendazole': alben,
+                'VitaminB': vitb,
+                'Chloramine': chloro, 
+                'DexamVet': dexam, 
+                'Other': (chloro > 0 || dexam > 0) ? `Chloro(${chloro}) Dexam(${dexam})` : '-'
+            });
+        }
 
-        // 🌟 ยิงตรงส่งข้อความเข้า LINE OA ส่วนตัวของคนกรอกเพื่อเป็นใบเสร็จสรุปยอด
-        if (d.lineId && d.lineId !== "TEST_ENV") {
-            await sendDirectLinePush(d.lineId, [flexReport]);
+        const totalAnim = cows + buffs + goats + sheeps;
+        const othersArr = [];
+        if (chloro > 0) othersArr.push(`Chloro (${chloro})`);
+        if (dexam > 0) othersArr.push(`Dexam (${dexam})`);
+        const othersStr = othersArr.length > 0 ? othersArr.join(', ') : '-';
+
+        // 🎨 สร้าง Flex Message แบบสมบูรณ์
+        const flexMsg = {
+            type: "flex", altText: `ยอดหัตถการ ${line}`,
+            contents: {
+                type: "bubble",
+                header: { type: "box", layout: "vertical", backgroundColor: "#00246B", contents: [{ type: "text", text: `📝 ยอดหัตถการ ${line}`, color: "#ffffff", weight: "bold", size: "lg", align: "center" }] },
+                body: {
+                    type: "box", layout: "vertical",
+                    contents: [
+                        { type: "text", text: `👤 Owner: ${ownerName}`, weight: "bold", size: "md", color: "#00246B" },
+                        { type: "text", text: `📍 ที่อยู่: ${ownerAddress} | 📞 โทร: ${ownerPhone}`, size: "xs", color: "#64748b", margin: "sm" },
+                        { type: "separator", margin: "md" },
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "Total Animals", size: "sm", color: "#334155", weight: "bold" }, { type: "text", text: `${totalAnim} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
+                        { type: "text", text: `วัว:${cows} | ควาย:${buffs} | แพะ:${goats} | แกะ:${sheeps}`, size: "xs", color: "#94a3b8", margin: "sm" },
+                        { type: "separator", margin: "md" },
+                        
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "💉 Blood (EDTA/Clot)", size: "sm", color: "#334155" }, { type: "text", text: `${edta} / ${clot} หลอด`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "💩 Feces Sample", size: "sm", color: "#334155" }, { type: "text", text: `${feces} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "🦠 FMD / LSD", size: "sm", color: "#334155" }, { type: "text", text: `${fmd} / ${lsd} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "💊 Iver / Alben", size: "sm", color: "#334155" }, { type: "text", text: `${iver} / ${alben} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "🧪 Vitamin B", size: "sm", color: "#334155" }, { type: "text", text: `${vitb} ตัว`, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
+                        
+                        { type: "box", layout: "horizontal", margin: "md", contents: [{ type: "text", text: "📌 Others", size: "sm", color: "#334155" }, { type: "text", text: othersStr, size: "sm", color: "#00246B", align: "end", weight: "bold" }] },
+                        { type: "text", text: `Recorded by: หมอ${staffName}`, size: "xxs", color: "#cbd5e1", align: "end", margin: "lg" }
+                    ]
+                }
+            }
+        };
+
+        // 🚨 ซ่อมบัคจุดสลบ! เปลี่ยนจาก flexReport เป็น flexMsg
+        if (lineId && lineId !== "TEST_ENV") {
+            try { await client.pushMessage({ to: lineId, messages: [flexMsg] }); } catch(e) {}
         }
         
-        // ส่งข้อความแจ้งเตือนเข้าไลน์กลุ่มปศุสัตว์หลัก
-        const groupId = process.env.LINE_GROUP_ID; 
+        const groupId = process.env.LINE_GROUP_ID;
         if (groupId) { 
-            await sendDirectLinePush(groupId, [flexReport]);
+            try { await client.pushMessage({ to: groupId, messages: [flexMsg] }); } catch(err) {} 
         }
-        
-        res.sendStatus(200);
-    } catch (err) { 
-        console.error(err); 
-        res.status(500).send(err.message); 
+
+        res.json({ success: true });
+    } catch (e) {
+        console.error("Procedure Save Error:", e);
+        const msg = (e.message || "").toLowerCase();
+        if (msg.includes("quota") || msg.includes("429") || msg.includes("rate limit") || msg.includes("too many requests")) {
+            return res.status(429).json({ success: false, message: "ระบบหมดพลัง ⏳ ขอให้รอ 1 นาทีแล้วกดทำรายการอีกครั้ง ขออภัยครับ" });
+        }
+        res.status(500).json({ success: false });
     }
 });
 
