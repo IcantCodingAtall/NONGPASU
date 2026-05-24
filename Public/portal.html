@@ -1051,14 +1051,31 @@
             document.getElementById('lab-entries-container').appendChild(div);
         }
 
+        // 🌟 อัปเดต UI ช่องกรอกผลแล็บอึ (ระบุจำนวนต่อ 1 Field)
+        // 🌟 อัปเดต UI ช่องกรอกผลแล็บอึ (ระบุจำนวนต่อ 1 Field) ใน Portal
         function getFecHtml(cls) {
             return `
             <div class="grid grid-cols-2 gap-1 mt-1 font-normal text-[10px]">
-                <div class="bg-white p-1 rounded border flex justify-between items-center"><span class="text-slate-500">Strongyle</span><div class="flex items-center"><input type="number" class="${cls} w-10 border-b outline-none text-center" oninput="liveEvalEpg(this)"><span class="w-6 text-center"></span></div></div>
-                <div class="bg-white p-1 rounded border flex justify-between items-center"><span class="text-slate-500">Trichuris</span><div class="flex items-center"><input type="number" class="${cls} w-10 border-b outline-none text-center" oninput="liveEvalEpg(this)"><span class="w-6 text-center"></span></div></div>
-                <div class="bg-white p-1 rounded border flex justify-between items-center"><span class="text-slate-500">Coccidia</span><div class="flex items-center"><input type="number" class="${cls} w-10 border-b outline-none text-center" oninput="liveEvalEpg(this)"><span class="w-6 text-center"></span></div></div>
-                <div class="bg-white p-1 rounded border flex justify-between items-center"><span class="text-slate-500">Capillaria</span><div class="flex items-center"><input type="number" class="${cls} w-10 border-b outline-none text-center" oninput="liveEvalEpg(this)"><span class="w-6 text-center"></span></div></div>
-                <div class="bg-white p-1 rounded border flex justify-between items-center col-span-2"><input type="text" class="${cls}-other w-full outline-none text-slate-500" placeholder="ระบุเชื้ออื่น..."><div class="flex items-center"><input type="number" class="${cls} w-10 border-b outline-none text-center" oninput="liveEvalEpg(this)"><span class="w-6 text-center"></span></div></div>
+                <div class="bg-white p-1 rounded border flex justify-between items-center">
+                    <span class="text-slate-600 font-medium">Strongyle</span>
+                    <div class="flex items-center"><input type="number" class="${cls} w-10 border-b border-slate-300 outline-none text-center bg-transparent text-blue-700 font-bold" placeholder="0"><span class="text-[8px] text-slate-400 ml-1">/field</span></div>
+                </div>
+                <div class="bg-white p-1 rounded border flex justify-between items-center">
+                    <span class="text-slate-600 font-medium">Trichuris</span>
+                    <div class="flex items-center"><input type="number" class="${cls} w-10 border-b border-slate-300 outline-none text-center bg-transparent text-blue-700 font-bold" placeholder="0"><span class="text-[8px] text-slate-400 ml-1">/field</span></div>
+                </div>
+                <div class="bg-white p-1 rounded border flex justify-between items-center">
+                    <span class="text-slate-600 font-medium">Coccidia</span>
+                    <div class="flex items-center"><input type="number" class="${cls} w-10 border-b border-slate-300 outline-none text-center bg-transparent text-blue-700 font-bold" placeholder="0"><span class="text-[8px] text-slate-400 ml-1">/field</span></div>
+                </div>
+                <div class="bg-white p-1 rounded border flex justify-between items-center">
+                    <span class="text-slate-600 font-medium">Capillaria</span>
+                    <div class="flex items-center"><input type="number" class="${cls} w-10 border-b border-slate-300 outline-none text-center bg-transparent text-blue-700 font-bold" placeholder="0"><span class="text-[8px] text-slate-400 ml-1">/field</span></div>
+                </div>
+                <div class="bg-white p-1 rounded border flex justify-between items-center col-span-2">
+                    <input type="text" class="${cls}-other w-full outline-none text-slate-600 bg-transparent placeholder-slate-400" placeholder="ระบุเชื้ออื่น...">
+                    <div class="flex items-center pl-2"><input type="number" class="${cls} w-10 border-b border-slate-300 outline-none text-center bg-transparent text-blue-700 font-bold" placeholder="0"><span class="text-[8px] text-slate-400 ml-1">/field</span></div>
+                </div>
             </div>`;
         }
 
